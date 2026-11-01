@@ -1,0 +1,169 @@
+{
+  "purpose": "compile_mandate",
+  "request": {
+    "max_tokens": 4000,
+    "system": "You turn a person's spending rules for a shopping agent into a structured draft.\nThe draft is shown back to them in plain language and only takes effect after they confirm it, so record exactly what they said and never add limits or permissions they didn't state.\n\nFields:\n- shops: keys of the shops they allow, from the list provided. If they say \"these shops\" or \"my usual shops\" without naming any, use every listed shop.\n- categories: what they want bought, as short generic product types (\"coffee\", \"dog-food\"). Empty if they didn't restrict it.\n- perPurchaseMaxUsd: the most for one purchase or one run's checkout, if stated.\n- askAboveUsd: they want to approve purchases above this amount.\n- budgets: spending limits per period. \"run\" is one shopping trip; \"day\", \"week\" and \"month\" are calendar windows.\n- maxQuantityPerItem: the most units of any one item, if stated.\n- schedule: how often to shop, if stated (\"every two weeks\" is every 2, unit week).\n- validForDays: if they gave an end (\"for the next 3 months\" is 90).\n- notEnforceable: any rule you couldn't express in these fields, in their words.\nAmounts are US dollars. Use null or an empty list for anything they didn't say.",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Shops:\n- bean-supply: Bean Supply Co\n- pet-pantry: Pet Pantry\n- home-basics: Home Basics\n\nTheir rules:\n<rules>\nBuy coffee and dog food every two weeks. Max $80 per run and $150 a month. Only use these 3 shops. Ask me before anything over $40.\n</rules>"
+      }
+    ],
+    "output_config": {
+      "effort": "low",
+      "format": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "shops": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "{enum: [\"bean-supply\",\"pet-pantry\",\"home-basics\"]}"
+              }
+            },
+            "categories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "perPurchaseMaxUsd": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "askAboveUsd": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "budgets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "period": {
+                    "type": "string",
+                    "description": "{enum: [\"run\",\"day\",\"week\",\"month\"]}"
+                  },
+                  "maxUsd": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "period",
+                  "maxUsd"
+                ]
+              }
+            },
+            "maxQuantityPerItem": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "description": "{minimum: -9007199254740991, maximum: 9007199254740991}"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "schedule": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "every": {
+                      "type": "integer",
+                      "description": "{minimum: -9007199254740991, maximum: 9007199254740991}"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "description": "{enum: [\"day\",\"week\",\"month\"]}"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "every",
+                    "unit"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "validForDays": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "description": "{minimum: -9007199254740991, maximum: 9007199254740991}"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "notEnforceable": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "shops",
+            "categories",
+            "perPurchaseMaxUsd",
+            "askAboveUsd",
+            "budgets",
+            "maxQuantityPerItem",
+            "schedule",
+            "validForDays",
+            "notEnforceable"
+          ],
+          "description": "{$schema: \"https://json-schema.org/draft/2020-12/schema\"}"
+        }
+      }
+    },
+    "model": "claude-haiku-5-5"
+  },
+  "response": {
+    "model": "claude-haiku-5-5",
+    "id": "msg_011Cgc7HCdN2K9J2UFQkVdCa",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"shops\":[\"bean-supply\",\"pet-pantry\",\"home-basics\"],\"categories\":[\"coffee\",\"dog-food\"],\"perPurchaseMaxUsd\":80,\"askAboveUsd\":40,\"budgets\":[{\"period\":\"run\",\"maxUsd\":80},{\"period\":\"month\",\"maxUsd\":150}],\"maxQuantityPerItem\":null,\"schedule\":{\"every\":2,\"unit\":\"week\"},\"validForDays\":null,\"notEnforceable\":[]}"
+      }
+    ],
+    "container": null,
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 1566,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 158,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "service_tier": "standard",
+      "inference_geo": "global",
+      "speed": "standard"
+    },
+    "diagnostics": null
+  }
+}

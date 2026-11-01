@@ -1,10 +1,11 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLlm, LlmOutputError } from "@/lib/llm/llm";
-import type { Transport } from "@/lib/llm/transport";
+import { replayTransport, type Transport } from "@/lib/llm/transport";
 import { compileMandate, draftToPolicy, type MandateDraft, type Shop } from "@/lib/policy/compile";
 import { resetDb, testDb } from "./support/db";
 import { ROGUE, SHOP_A, SHOP_B } from "./support/fixtures";
+import { DEMO_SHOPS, DEMO_STATEMENT, DEMO_TIMEZONE, FIXTURE_DIR } from "./support/llm-fixtures";
 
 const { db, pool } = testDb();
 afterAll(() => pool.end());
@@ -122,5 +123,26 @@ describe("compileMandate", () => {
   it("rejects a draft naming a shop that isn't in the directory", async () => {
     const llm = createLlm({ db, transport: replying({ ...demoDraft, shops: ["bean-supply", ROGUE] }), budgetUsd: 1.5 });
     await expect(compileMandate(llm, { statement, ...context })).rejects.toBeInstanceOf(LlmOutputError);
+  });
+});
+
+describe("compileMandate against a recorded Claude response", () => {
+  it("compiles the demo mandate exactly as stated", async () => {
+    const llm = createLlm({ db, transport: replayTransport(FIXTURE_DIR), budgetUsd: 1.5 });
+    const result = await compileMandate(llm, { statement: DEMO_STATEMENT, shops: DEMO_SHOPS, timezone: DEMO_TIMEZONE });
+    expect(result).toMatchObject({
+      ok: true,
+      policy: {
+        perTransactionCapCents: 8000,
+        approvalThresholdCents: 4000,
+        budgets: [
+          { period: "run", limitCents: 8000 },
+          { period: "month", limitCents: 15000 },
+        ],
+        categories: ["coffee", "dog-food"],
+        schedule: { every: 2, unit: "week" },
+      },
+      notEnforced: [],
+    });
   });
 });
