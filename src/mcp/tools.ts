@@ -1,0 +1,200 @@
+import { desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { mandates, payments } from "@/db/schema";
+import { spentByPeriod, type Payment } from "@/lib/ledger/reserve";
+import { sweepApprovals } from "@/lib/payments/approvals";
+import { APPROVAL_TIMEOUT_MS, requestPayment, revokeMandate, type PaymentDeps } from "@/lib/payments/service";
+import { describePolicy, formatCents } from "@/lib/policy/describe";
+import { evaluate } from "@/lib/policy/evaluate";
+import { cartSchema, type Policy } from "@/lib/policy/schema";
+
+/** What an MCP agent sends. Everything in it is a proposal that the evaluator re-checks. */
+export const cartInput = {
+  payee_merchant_id: z.string().describe("PayPal merchant ID of the shop to pay, as listed by check_mandate."),
+  items: z
+    .array(
+      z.object({
+        product_id: z.string().optional(),
+        title: z.string(),
+        unit_price_cents: z.number().int().describe("Price of one unit in US cents."),
+        quantity: z.number().int(),
+        category: z
+          .string()
+          .nullable()
+          .describe("Lowercase-hyphenated product type, e.g. 'dog-food'; null if unsure (the user may then be asked)."),
+      }),
+    )
+    .min(1),
+  shipping_cents: z.number().int().optional(),
+  tax_cents: z.number().int().optional(),
+};
+
+export type CartInput = z.infer<z.ZodObject<typeof cartInput>>;
+
+function toCart(input: CartInput) {
+  return {
+    payeeMerchantId: input.payee_merchant_id,
+    currency: "USD",
+    items: input.items.map((i) => ({
+      ...(i.product_id ? { productId: i.product_id } : {}),
+      title: i.title,
+      unitPriceCents: i.unit_price_cents,
+      quantity: i.quantity,
+      category: i.category,
+    })),
+    shippingCents: input.shipping_cents ?? 0,
+    taxCents: input.tax_cents ?? 0,
+  };
+}
+
+async function loadMandate(deps: PaymentDeps, mandateId: string) {
+  const [mandate] = await deps.db.select().from(mandates).where(eq(mandates.id, mandateId));
+  if (!mandate) throw new Error("mandate not found");
+  return mandate;
+}
+
+function shopName(policy: Policy, merchantId: string): string {
+  return policy.merchants.find((m) => m.merchantId === merchantId)?.name ?? `unlisted payee ${merchantId}`;
+}
+
+async function budgets(deps: PaymentDeps, mandateId: string, policy: Policy, now: Date) {
+  // MCP requests carry no run, so a per-run budget limits each request on its own.
+  const spent = await spentByPeriod(deps.db, mandateId, policy, null, now);
+  return {
+    spent,
+    rows: policy.budgets.map((b) => ({
+      period: b.period,
+      limit_cents: b.limitCents,
+      used_cents: spent[b.period] ?? 0,
+      remaining_cents: Math.max(0, b.limitCents - (spent[b.period] ?? 0)),
+    })),
+  };
+}
+
+// Timeouts are applied lazily, so an agent polling for an outcome also moves expired approvals on.
+async function sweep(deps: PaymentDeps) {
+  await sweepApprovals(deps).catch((error) => console.warn("approval sweep failed:", error));
+}
+
+export async function checkMandate(deps: PaymentDeps, mandateId: string, preview?: CartInput) {
+  await sweep(deps);
+  const now = deps.clock?.() ?? new Date();
+  const mandate = await loadMandate(deps, mandateId);
+  const { policy } = mandate;
+  const { spent, rows } = await budgets(deps, mandateId, policy, now);
+
+  let previewResult;
+  if (preview) {
+    const cart = cartSchema.safeParse(toCart(preview));
+    previewResult = cart.success
+      ? (() => {
+          const e = evaluate({ policy, mandateStatus: mandate.status, cart: cart.data, spent, now });
+          return {
+            decision: e.decision,
+            clause: e.clause,
+            total_cents: e.totalCents,
+            failing: e.checks.filter((c) => c.outcome !== "pass"),
+            note: "A preview only: nothing is reserved, and request_payment decides again.",
+          };
+        })()
+      : { invalid: cart.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
+  }
+
+  return {
+    mandate: {
+      id: mandate.id,
+      status: mandate.status,
+      hash: mandate.hash,
+      statement: mandate.statement,
+      rules: describePolicy(policy),
+      expires_at: policy.expiresAt,
+    },
+    shops: policy.merchants.map((m) => ({ name: m.name, merchant_id: m.merchantId })),
+    categories: policy.categories,
+    per_purchase_cap_cents: policy.perTransactionCapCents,
+    ask_user_above_cents: policy.approvalThresholdCents,
+    max_quantity_per_item: policy.maxQuantityPerItem,
+    budgets: rows,
+    ...(previewResult ? { preview: previewResult } : {}),
+  };
+}
+
+function view(policy: Policy, p: Payment) {
+  return {
+    payment_id: p.id,
+    created_at: p.createdAt.toISOString(),
+    shop: shopName(policy, p.payeeMerchantId),
+    total_cents: p.totalCents,
+    decision: p.decision,
+    rule: p.clauseText,
+    status: p.status,
+    source: p.source,
+  };
+}
+
+export async function listSpend(deps: PaymentDeps, mandateId: string, limit = 20) {
+  await sweep(deps);
+  const now = deps.clock?.() ?? new Date();
+  const mandate = await loadMandate(deps, mandateId);
+  const recent = await deps.db
+    .select()
+    .from(payments)
+    .where(eq(payments.mandateId, mandateId))
+    .orderBy(desc(payments.createdAt))
+    .limit(Math.min(Math.max(limit, 1), 100));
+  return {
+    mandate_status: mandate.status,
+    budgets: (await budgets(deps, mandateId, mandate.policy, now)).rows,
+    payments: recent.map((p) => view(mandate.policy, p)),
+  };
+}
+
+function outcomeMessage(policy: Policy, p: Payment, detail: string | undefined): string {
+  const amount = formatCents(p.totalCents);
+  const shop = shopName(policy, p.payeeMerchantId);
+  switch (p.status) {
+    case "captured":
+      return `Paid ${amount} to ${shop}.`;
+    case "pending_approval":
+      return `A hold of ${amount} is placed with ${shop} and the user has been asked to approve it (${p.clauseText}). It is captured if they approve and released if they reject or don't answer within ${APPROVAL_TIMEOUT_MS / 3_600_000} hours. Use list_spend to see the outcome.`;
+    case "denied":
+      return `Denied by the mandate: ${p.clauseText}${detail ? ` (${detail})` : ""}. Nothing was charged.`;
+    case "failed":
+      return "PayPal did not place the hold. Nothing was charged.";
+    case "voided":
+      return "The hold was released. Nothing was charged.";
+    case "authorizing":
+    case "capturing":
+    case "voiding":
+      return "This payment is still being processed. Send the same request again shortly to see the result; it will not pay twice.";
+    default:
+      return `A hold of ${amount} is placed with ${shop} but has not been captured.`;
+  }
+}
+
+export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, input: CartInput) {
+  const result = await requestPayment(deps, { mandateId, runId: null, source: "mcp", cart: toCart(input) });
+  if (!result.ok) {
+    return { error: "invalid_cart", issues: result.issues, message: "The cart is malformed; nothing was recorded or charged." };
+  }
+  const { policy } = await loadMandate(deps, mandateId);
+  const p = result.payment;
+  const detail = p.checks.find((c) => c.clause === p.clauseId)?.detail;
+  return {
+    ...view(policy, p),
+    clause_id: p.clauseId,
+    already_requested: result.replayed,
+    message: outcomeMessage(policy, p, detail),
+  };
+}
+
+export async function revokeMandateTool(deps: PaymentDeps, mandateId: string) {
+  const result = await revokeMandate(deps, mandateId);
+  return {
+    revoked: true,
+    already_revoked: result.alreadyRevoked,
+    holds_released: result.voided.length,
+    holds_still_open: result.stillOpen.length,
+    message: "The mandate is revoked. Every further payment request under it will be denied.",
+  };
+}

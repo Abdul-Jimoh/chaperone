@@ -58,6 +58,17 @@ export const mandates = pgTable("mandates", {
   createdAt: createdAt(),
 });
 
+/** An MCP client's credential. The key decides which mandate it pays under; the agent can't pick one. */
+export const agentKeys = pgTable("agent_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mandateId: uuid("mandate_id").notNull().references(() => mandates.id),
+  label: text("label").notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
 export const decision = pgEnum("decision", ["allow", "needs_approval", "deny"]);
 export const paymentSource = pgEnum("payment_source", ["agent", "mcp"]);
 export const paymentStatus = pgEnum("payment_status", [

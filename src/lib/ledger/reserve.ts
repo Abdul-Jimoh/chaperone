@@ -26,7 +26,8 @@ export type DecideResult = {
 
 export class MandateNotFoundError extends Error {}
 
-async function spentByPeriod(tx: Tx, mandateId: string, policy: Policy, runId: string | null, now: Date) {
+/** Cents reserved or captured in each of the policy's budget windows: the same numbers the evaluator is given. */
+export async function spentByPeriod(tx: Db | Tx, mandateId: string, policy: Policy, runId: string | null, now: Date) {
   const spent: Partial<Record<BudgetPeriod, number>> = {};
   const live = inArray(reservations.status, ["held", "captured"]);
   for (const { period } of policy.budgets) {

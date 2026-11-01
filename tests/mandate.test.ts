@@ -1,9 +1,12 @@
 import { exportJWK, generateKeyPair, type JWK } from "jose";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { merchants, users } from "@/db/schema";
+import { storeConfirmedMandate } from "@/lib/mandates";
 import { canonicalJson } from "@/lib/policy/canonical";
 import { describePolicy } from "@/lib/policy/describe";
 import { mandateHash, publicJwkOf, signMandate, verifyMandate, type MandateBody } from "@/lib/policy/mandate";
 import { policySchema } from "@/lib/policy/schema";
+import { resetDb, testDb } from "./support/db";
 import { samplePolicy } from "./support/fixtures";
 
 let privateJwk: JWK;
@@ -84,5 +87,25 @@ describe("policy schema and read-back", () => {
     expect(policySchema.safeParse(samplePolicy({ merchants: [{ merchantId: "evil.example.com", name: "x" }] })).success).toBe(false);
     expect(policySchema.safeParse(samplePolicy({ perTransactionCapCents: 100_000_000 })).success).toBe(false);
     expect(policySchema.safeParse(samplePolicy({ timezone: "Mars/Olympus" })).success).toBe(false);
+  });
+});
+
+describe("storeConfirmedMandate", () => {
+  const { db, pool } = testDb(5);
+  afterAll(() => pool.end());
+  beforeEach(() => resetDb(db));
+
+  it("stores a mandate whose JWS verifies and whose hash every payment will record", async () => {
+    const [user] = await db.insert(users).values({ displayName: "Test" }).returning();
+    const mandate = await storeConfirmedMandate(db, {
+      userId: user!.id,
+      statement: body.statement,
+      policy: samplePolicy(),
+      signingJwk: privateJwk,
+    });
+    const verified = await verifyMandate(mandate.jws, publicJwkOf(privateJwk));
+    expect(verified.hash).toBe(mandate.hash);
+    expect(verified.body).toMatchObject({ mandateId: mandate.id, subject: user!.id, policy: samplePolicy() });
+    expect(await db.select().from(merchants)).toHaveLength(2);
   });
 });
