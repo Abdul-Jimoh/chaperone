@@ -1,5 +1,5 @@
 // Talks to a running Chaperone MCP endpoint as a separate client would.
-// pnpm tsx scripts/mcp-smoke.ts [url] [pay]   (default url http://localhost:3000/api/mcp; "pay" buys $18 of coffee from Shop A)
+// pnpm tsx scripts/mcp-smoke.ts [url] [pay]   (default url http://localhost:3000/api/mcp; "pay" buys $4.50 of dish soap from Shop A)
 import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -21,7 +21,7 @@ await show("check_mandate");
 if (process.argv[3] === "pay") {
   await show("request_payment", {
     payee_merchant_id: process.env.PAYPAL_SHOP_A_MERCHANT_ID,
-    items: [{ product_id: "smoke-beans-1kg", title: "Whole bean coffee, 1 kg", unit_price_cents: 1800, quantity: 1, category: "coffee" }],
+    items: [{ product_id: "smoke-dish-soap", title: "Dish soap, 24 oz", unit_price_cents: 450, quantity: 1, category: "dish-soap" }],
   });
   await show("list_spend", { limit: 5 });
 }
