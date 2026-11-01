@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createPayPalClient, PayPalError } from "@/lib/paypal/client";
 import { createAuthorizeOrder, firstAuthorization, getOrder, type Order } from "@/lib/paypal/orders";
 import { captureAuthorization, getAuthorization, reauthorize, voidAuthorization } from "@/lib/paypal/payments";
+import { createPayeeClients, payeeCredentialsFromEnv, voidHold } from "@/lib/paypal/payees";
 import { approveLink, createPaymentTokenFromSetupToken, createPayPalSetupToken } from "@/lib/paypal/vault";
 
 process.loadEnvFile(".env.local");
@@ -107,19 +108,21 @@ try {
     case "void":
       show("void", await voidAuthorization(client, arg1 ?? state.lastAuthorizationId!, randomUUID()));
       break;
-    case "void-as-shop": {
-      const shop = createPayPalClient({
-        clientId: process.env.PAYPAL_SHOP_A_CLIENT_ID!,
-        clientSecret: process.env.PAYPAL_SHOP_A_CLIENT_SECRET!,
-      });
-      show("void as Shop A", await voidAuthorization(shop, arg1 ?? state.lastAuthorizationId!, randomUUID()));
+    case "void-hold": {
+      const payees = createPayeeClients(payeeCredentialsFromEnv(process.env));
+      const authorizationId = arg1 ?? state.lastAuthorizationId!;
+      const { payee } = await getAuthorization(client, authorizationId);
+      show(
+        "void via payee credentials",
+        await voidHold({ platform: client, payees, authorizationId, expectedPayeeMerchantId: payee!.merchant_id!, requestId: randomUUID() }),
+      );
       break;
     }
     case "reauthorize":
       show("reauthorize", await reauthorize(client, arg1 ?? state.lastAuthorizationId!, { amountCents: 1800, currency: "USD", requestId: randomUUID() }));
       break;
     default:
-      console.log("commands: token | vault-start | vault-finish [setupTokenId] | authorize [a|b|c|rogue] [usd] | order [id] | auth [id] | capture [id] | void [id] | void-as-shop [id] | setup-status | authorize-self [usd] | reauthorize [id]");
+      console.log("commands: token | vault-start | vault-finish [setupTokenId] | authorize [a|b|c|rogue] [usd] | order [id] | auth [id] | capture [id] | void [id] | void-hold [id] | setup-status | authorize-self [usd] | reauthorize [id]");
   }
 } catch (e) {
   if (e instanceof PayPalError) {

@@ -6,6 +6,9 @@ export type Authorization = {
   id: string;
   status: "CREATED" | "CAPTURED" | "DENIED" | "PARTIALLY_CAPTURED" | "VOIDED" | "PENDING" | string;
   amount: Money;
+  payee?: { merchant_id?: string; email_address?: string };
+  invoice_id?: string;
+  custom_id?: string;
   expiration_time?: string;
   create_time?: string;
 };
