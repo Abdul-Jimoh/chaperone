@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { inject } from "vitest";
 import { createDb, type Db } from "@/db/client";
-import { mandates, users } from "@/db/schema";
+import { mandates, paymentMethods, users } from "@/db/schema";
 import type { Policy } from "@/lib/policy/schema";
 
 export function testDb(max = 20) {
@@ -13,6 +13,13 @@ export async function resetDb(db: Db) {
     truncate table ledger_events, approvals, reservations, payments, mandates, payment_methods,
       merchants, webhook_events, llm_usage, users restart identity cascade
   `);
+}
+
+/** A mandate whose user has linked a PayPal wallet, so holds can be placed. */
+export async function seedLinkedMandate(db: Db, policy: Policy) {
+  const mandate = await seedMandate(db, policy);
+  await db.insert(paymentMethods).values({ userId: mandate.userId, paypalPaymentTokenId: "VAULT-TEST-1" });
+  return mandate;
 }
 
 export async function seedMandate(db: Db, policy: Policy, status: "active" | "revoked" = "active") {

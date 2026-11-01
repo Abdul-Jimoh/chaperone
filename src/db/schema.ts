@@ -65,6 +65,9 @@ export const paymentStatus = pgEnum("payment_status", [
   "authorizing",
   "pending_approval",
   "authorized",
+  // Claimed before calling PayPal, so a capture and a void (e.g. from a revoke) can't both run on one hold.
+  "capturing",
+  "voiding",
   "captured",
   "voided",
   "failed",
