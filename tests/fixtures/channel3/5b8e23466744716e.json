@@ -1,0 +1,48 @@
+{
+  "query": "paper towels pack",
+  "limit": 6,
+  "listings": [
+    {
+      "productId": "QAV4lYQ",
+      "title": "Scott Multi-Fold 2-Ply Paper Towels, 250 Sheets Per Pack, Case Of 16 Packs",
+      "description": "Scott Multi-Fold 2-Ply Paper Towels are economical, commercial-grade towels designed for office restrooms or kitchens. They feature absorbency pockets to soak up water quickly, reducing waste and towel usage. These towels are FSC and EcoLogo certified, meeting EPA guidelines for minimum post-consume",
+      "priceCents": 6829,
+      "sourceCategory": "paper-towels"
+    },
+    {
+      "productId": "Bz858nK",
+      "title": "Multi-Fold 2-Ply Paper Towels",
+      "description": "This product consists of a case of Scott Multi-Fold 2-Ply Paper Towels, totaling 16 packs, with 250 sheets per pack. Designed for commercial use in restrooms or kitchens, these paper towels feature Absorbency Pockets to quickly soak up water, helping to reduce waste. They are certified by FSC and Ec",
+      "priceCents": 5459,
+      "sourceCategory": "paper-towels"
+    },
+    {
+      "productId": "UPQHPXl",
+      "title": "Scott Essential Multifold Paper Towels (01804)",
+      "description": "Scott Essential Multifold Paper Towels (01804) are white, fast-drying absorbent paper towels designed to reduce waste with exclusive absorbency pockets. This bulk case contains 16 packs, with each pack holding 250 towels, for a total of 4,000 towels. Each towel measures 9.2\" x 9.4\" (23.4cm x 23.9cm)",
+      "priceCents": 5999,
+      "sourceCategory": "paper-towels"
+    },
+    {
+      "productId": "exPQDbX",
+      "title": "Choose-A-Sheet 1-Ply Paper Towels",
+      "description": "These Scott paper towels are designed for everyday cleanup tasks in homes, offices, or classrooms. They feature absorbent, durable ridges to effectively tackle spills and messes, leaving surfaces clean and dry. This package contains 24 rolls, with each roll holding 100 perforated sheets.",
+      "priceCents": 5449,
+      "sourceCategory": "paper-towels"
+    },
+    {
+      "productId": "MCDqatq",
+      "title": "Viva Multi-Surface Choose-A-Sheet Paper Towels",
+      "description": "Viva Multi-Surface Choose-A-Sheet Paper Towels are 2-ply, absorbent towels designed for versatile cleaning across various surfaces including metal, granite, glass, and wood. This pack contains 6 triple rolls, with each roll providing 165 sheets for a total of 990 sheets per pack. These towels are en",
+      "priceCents": 3499,
+      "sourceCategory": "paper-towels"
+    },
+    {
+      "productId": "z1GTqYv",
+      "title": "Tork Multifold Paper Towels, 2-ply, 189 Sheets/Pack, 16 Packs/Carton",
+      "description": "These Tork Advanced 2-Ply Multifold Paper Towels are designed for high-volume restrooms, offering a perfect blend of quality, performance, and value. Processed without chlorine and made with a minimum of 40% post-consumer content, these towels are an eco-friendly choice. The multifold design ensures",
+      "priceCents": 7019,
+      "sourceCategory": "paper-towels"
+    }
+  ]
+}

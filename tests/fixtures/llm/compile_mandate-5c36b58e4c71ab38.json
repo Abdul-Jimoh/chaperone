@@ -6,7 +6,7 @@
     "messages": [
       {
         "role": "user",
-        "content": "Shops:\n- bean-supply: Bean Supply Co\n- pet-pantry: Pet Pantry\n- home-basics: Home Basics\n\nTheir rules:\n<rules>\nBuy coffee and dog food every two weeks. Max $80 per run and $150 a month. Only use these 3 shops. Ask me before anything over $40.\n</rules>"
+        "content": "Shops:\n- corner-market: Corner Market\n- pet-pantry: Pet Pantry\n- home-basics: Home Basics\n\nTheir rules:\n<rules>\nBuy dog food and household basics like paper towels and dish soap every two weeks. Max $80 per run and $150 a month. Only use these 3 shops. Ask me before anything over $40.\n</rules>"
       }
     ],
     "output_config": {
@@ -20,7 +20,7 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "description": "{enum: [\"bean-supply\",\"pet-pantry\",\"home-basics\"]}"
+                "description": "{enum: [\"corner-market\",\"pet-pantry\",\"home-basics\"]}"
               }
             },
             "categories": {
@@ -135,13 +135,13 @@
   },
   "response": {
     "model": "claude-haiku-5-5",
-    "id": "msg_011Cgc7HCdN2K9J2UFQkVdCa",
+    "id": "msg_011CgcvnGWoM4XWgJdpF8bkz",
     "type": "message",
     "role": "assistant",
     "content": [
       {
         "type": "text",
-        "text": "{\"shops\":[\"bean-supply\",\"pet-pantry\",\"home-basics\"],\"categories\":[\"coffee\",\"dog-food\"],\"perPurchaseMaxUsd\":80,\"askAboveUsd\":40,\"budgets\":[{\"period\":\"run\",\"maxUsd\":80},{\"period\":\"month\",\"maxUsd\":150}],\"maxQuantityPerItem\":null,\"schedule\":{\"every\":2,\"unit\":\"week\"},\"validForDays\":null,\"notEnforceable\":[]}"
+        "text": "{\"shops\":[\"corner-market\",\"pet-pantry\",\"home-basics\"],\"categories\":[\"dog-food\",\"paper-towels\",\"dish-soap\"],\"perPurchaseMaxUsd\":80,\"askAboveUsd\":40,\"budgets\":[{\"period\":\"run\",\"maxUsd\":80},{\"period\":\"month\",\"maxUsd\":150}],\"maxQuantityPerItem\":null,\"schedule\":{\"every\":2,\"unit\":\"week\"},\"validForDays\":null,\"notEnforceable\":[\"household basics like paper towels and dish soap (listed as examples; treated as the categories above, but other household basics were not specified)\"]}"
       }
     ],
     "container": null,
@@ -149,14 +149,14 @@
     "stop_sequence": null,
     "stop_details": null,
     "usage": {
-      "input_tokens": 1566,
+      "input_tokens": 1571,
       "cache_creation_input_tokens": 0,
       "cache_read_input_tokens": 0,
       "cache_creation": {
         "ephemeral_5m_input_tokens": 0,
         "ephemeral_1h_input_tokens": 0
       },
-      "output_tokens": 158,
+      "output_tokens": 204,
       "output_tokens_details": {
         "thinking_tokens": 0
       },

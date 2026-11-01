@@ -5,7 +5,7 @@ import { replayTransport, type Transport } from "@/lib/llm/transport";
 import { compileMandate, draftToPolicy, type MandateDraft, type Shop } from "@/lib/policy/compile";
 import { resetDb, testDb } from "./support/db";
 import { ROGUE, SHOP_A, SHOP_B } from "./support/fixtures";
-import { DEMO_SHOPS, DEMO_STATEMENT, DEMO_TIMEZONE, FIXTURE_DIR } from "./support/llm-fixtures";
+import { DEMO_POLICY, DEMO_SHOPS, DEMO_STATEMENT, DEMO_TIMEZONE, FIXTURE_DIR } from "./support/llm-fixtures";
 
 const { db, pool } = testDb();
 afterAll(() => pool.end());
@@ -127,7 +127,7 @@ describe("compileMandate", () => {
 });
 
 describe("compileMandate against a recorded Claude response", () => {
-  it("compiles the demo mandate exactly as stated", async () => {
+  it("compiles the demo mandate exactly as stated, and says what it couldn't enforce", async () => {
     const llm = createLlm({ db, transport: replayTransport(FIXTURE_DIR), budgetUsd: 1.5 });
     const result = await compileMandate(llm, { statement: DEMO_STATEMENT, shops: DEMO_SHOPS, timezone: DEMO_TIMEZONE });
     expect(result).toMatchObject({
@@ -139,10 +139,10 @@ describe("compileMandate against a recorded Claude response", () => {
           { period: "run", limitCents: 8000 },
           { period: "month", limitCents: 15000 },
         ],
-        categories: ["coffee", "dog-food"],
-        schedule: { every: 2, unit: "week" },
       },
-      notEnforced: [],
     });
+    if (!result.ok) return;
+    expect(result.policy).toEqual(DEMO_POLICY);
+    expect(result.notEnforced).toEqual([expect.stringContaining("household basics")]);
   });
 });

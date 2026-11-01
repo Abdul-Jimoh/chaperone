@@ -6,7 +6,7 @@
     "messages": [
       {
         "role": "user",
-        "content": "Allowed categories: coffee, dog-food\n\nProducts:\nL13: Airscape® Coffee Bean Bag [source category: food-storage-bags]\nL14: Coffee Bean Bag [source category: food-storage-bags]\nL15: Dimoo Coffee Beans B Blister Packs Figure 'Coffee Bean C' [source category: action-toy-figures]\nL16: CC-50-BK Coffee Beans Container [source category: food-storage-containers]\nL17: Tenugui - Coffee Beans [source category: kitchen-towels]\nL18: Artificial Coffee Beans [source category: vase-fillers]"
+        "content": "Allowed categories: dog-food, paper-towels, dish-soap\n\nProducts:\nL1: Dog Food Dry Bag [source category: pet-food-containers]\nL2: Halo Elevate Healthy Grains Salmon Recipe Dry Dog Food, 20-lb bag [source category: non-prescription-dog-food]\nL3: Life Protection Formula Natural Grain-Free Lamb & Potatoes Dry Dog Food [source category: non-prescription-dog-food]\nL4: Blue Buffalo Life Protection Formula Adult Dry Dog Food [source category: non-prescription-dog-food]\nL5: Wellness Simple Limited Ingredient Small Breed Adult Grain-Free Natural Salmon & Potato Dry Dog Food [source category: non-prescription-dog-food]\nL6: Adult Small Bites Chicken & Barley Recipe Dry Dog Food [source category: non-prescription-dog-food]"
       }
     ],
     "output_config": {
@@ -23,11 +23,11 @@
                 "properties": {
                   "id": {
                     "type": "string",
-                    "description": "{enum: [\"L13\",\"L14\",\"L15\",\"L16\",\"L17\",\"L18\"]}"
+                    "description": "{enum: [\"L1\",\"L2\",\"L3\",\"L4\",\"L5\",\"L6\"]}"
                   },
                   "category": {
                     "type": "string",
-                    "description": "{enum: [\"other\",\"unsure\",\"coffee\",\"dog-food\"]}"
+                    "description": "{enum: [\"other\",\"unsure\",\"dog-food\",\"paper-towels\",\"dish-soap\"]}"
                   }
                 },
                 "additionalProperties": false,
@@ -50,13 +50,13 @@
   },
   "response": {
     "model": "claude-haiku-5-5",
-    "id": "msg_011CgcuVpbmR18KaAqjGtbdx",
+    "id": "msg_011CgcvqovWWY7Pc1GjeopfQ",
     "type": "message",
     "role": "assistant",
     "content": [
       {
         "type": "text",
-        "text": "{\"products\":[{\"id\":\"L13\",\"category\":\"other\"},{\"id\":\"L14\",\"category\":\"other\"},{\"id\":\"L15\",\"category\":\"other\"},{\"id\":\"L16\",\"category\":\"other\"},{\"id\":\"L17\",\"category\":\"other\"},{\"id\":\"L18\",\"category\":\"other\"}]}"
+        "text": "{\"products\":[{\"id\":\"L1\",\"category\":\"other\"},{\"id\":\"L2\",\"category\":\"dog-food\"},{\"id\":\"L3\",\"category\":\"dog-food\"},{\"id\":\"L4\",\"category\":\"dog-food\"},{\"id\":\"L5\",\"category\":\"dog-food\"},{\"id\":\"L6\",\"category\":\"dog-food\"}]}"
       }
     ],
     "container": null,
@@ -64,14 +64,14 @@
     "stop_sequence": null,
     "stop_details": null,
     "usage": {
-      "input_tokens": 731,
+      "input_tokens": 855,
       "cache_creation_input_tokens": 0,
       "cache_read_input_tokens": 0,
       "cache_creation": {
         "ephemeral_5m_input_tokens": 0,
         "ephemeral_1h_input_tokens": 0
       },
-      "output_tokens": 93,
+      "output_tokens": 108,
       "output_tokens_details": {
         "thinking_tokens": 0
       },

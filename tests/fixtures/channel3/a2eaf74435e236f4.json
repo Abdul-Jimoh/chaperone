@@ -1,0 +1,48 @@
+{
+  "query": "dish soap bottle",
+  "limit": 6,
+  "listings": [
+    {
+      "productId": "ah5hSoW",
+      "title": "Liquid Dish Soap Refill Bottle",
+      "description": "A 3-pack of simplehuman Liquid Dish Soap refill bottles, each containing 30 fl oz. This fragrance-free soap is specifically formulated for use with simplehuman Sensor Pumps to ensure consistent dispensing without clogs or drips. The formula is designed to be tough on grime while remaining gentle on ",
+      "priceCents": 3099,
+      "sourceCategory": "dish-detergent-soap"
+    },
+    {
+      "productId": "7Ywd0SF",
+      "title": "Foam Dish Soap Refill Bottle",
+      "description": "Simplehuman's Citrus Blossom Foam Dish Soap refill delivers a rich, creamy lather that is tough on grime but easy on your hands, leaving dishes squeaky clean. Specially formulated for the Simplehuman Sensor Pump Foam, it ensures the correct amount dispenses quickly and consistently without clogs or ",
+      "priceCents": 1200,
+      "sourceCategory": "dish-detergent-soap"
+    },
+    {
+      "productId": "YSltPCt",
+      "title": "Fragrance Free Liquid Dish Soap Refill Bottle",
+      "description": "A set of three 30 fl oz refill bottles of Simplehuman's Fragrance Free Liquid Dish Soap. This clean rinse gel is specifically formulated to be tough on grime while remaining gentle on hands. It is optimized for use with Simplehuman Sensor Pumps to ensure consistent dispensing without clogs or drips.",
+      "priceCents": 1200,
+      "sourceCategory": "dish-detergent-soap"
+    },
+    {
+      "productId": "wkkClcn",
+      "title": "Dapple Baby Bottle & Dish Soap Refill",
+      "description": "Refill your baby bottle and dish soap routine with this Dapple Baby Bottle & Dish Soap Refill (Fragrance Free). It’s specially formulated to clean milk and formula residue, remove up to 50% more milk film and odor, and rinse clean for a residue-free clean. Made with plant-based ingredients and a Cle",
+      "priceCents": 1099,
+      "sourceCategory": "dish-detergent-soap"
+    },
+    {
+      "productId": "Sw9xVUP",
+      "title": "Bottle & Dish Soap (3 Pack)",
+      "description": "This is a three-pack of Dapple Bottle & Dish Soap, specifically the fragrance-free version in a pink color scheme. Each bottle contains 16.9 oz of soap designed to effectively clean baby bottles, sippy cups, pacifiers, and breast pump components. Formulated with plant-based ingredients, it targets s",
+      "priceCents": 1746,
+      "sourceCategory": "dish-detergent-soap"
+    },
+    {
+      "productId": "NNlAo7B",
+      "title": "Mrs. Meyer's Clean Day Blueberry Liquid Dish Soap",
+      "description": "Mrs. Meyer's Clean Day liquid dish soap is designed to cut through grease using a biodegradable formula with plant-derived cleaning agents. This limited edition blueberry scented soap is made without parabens, phthalates, or animal-derived ingredients and is Leaping Bunny certified, making it an eff",
+      "priceCents": 400,
+      "sourceCategory": "dish-detergent-soap"
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "purpose": "classify",
+  "request": {
+    "max_tokens": 2000,
+    "system": "You sort products into a shopper's allowed categories.\nFor each product, answer with the allowed category it plainly is, \"other\" if it is clearly none of them, or \"unsure\" if you can't tell.\nA product only belongs to a category if it is that thing itself, not an accessory, container or tool for it (a coffee canister is not coffee).",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Allowed categories: dog-food, paper-towels, dish-soap\n\nProducts:\nL13: Liquid Dish Soap Refill Bottle [source category: dish-detergent-soap]\nL14: Foam Dish Soap Refill Bottle [source category: dish-detergent-soap]\nL15: Fragrance Free Liquid Dish Soap Refill Bottle [source category: dish-detergent-soap]\nL16: Dapple Baby Bottle & Dish Soap Refill [source category: dish-detergent-soap]\nL17: Bottle & Dish Soap (3 Pack) [source category: dish-detergent-soap]\nL18: Mrs. Meyer's Clean Day Blueberry Liquid Dish Soap [source category: dish-detergent-soap]"
+      }
+    ],
+    "output_config": {
+      "effort": "low",
+      "format": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "products": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "{enum: [\"L13\",\"L14\",\"L15\",\"L16\",\"L17\",\"L18\"]}"
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "{enum: [\"other\",\"unsure\",\"dog-food\",\"paper-towels\",\"dish-soap\"]}"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "category"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "products"
+          ],
+          "description": "{$schema: \"https://json-schema.org/draft/2020-12/schema\"}"
+        }
+      }
+    },
+    "model": "claude-haiku-5-5"
+  },
+  "response": {
+    "model": "claude-haiku-5-5",
+    "id": "msg_011Cgcvrc4fRdsDyAdCbBfxN",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"products\":[{\"id\":\"L13\",\"category\":\"dish-soap\"},{\"id\":\"L14\",\"category\":\"dish-soap\"},{\"id\":\"L15\",\"category\":\"dish-soap\"},{\"id\":\"L16\",\"category\":\"unsure\"},{\"id\":\"L17\",\"category\":\"unsure\"},{\"id\":\"L18\",\"category\":\"dish-soap\"}]}"
+      }
+    ],
+    "container": null,
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 791,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 113,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "service_tier": "standard",
+      "inference_geo": "global",
+      "speed": "standard"
+    },
+    "diagnostics": null
+  }
+}

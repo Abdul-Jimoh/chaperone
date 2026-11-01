@@ -6,7 +6,7 @@
     "messages": [
       {
         "role": "user",
-        "content": "Allowed categories: coffee, dog-food\n\nProducts:\nL7: Complete Adult Dry Dog Food [source category: non-prescription-dog-food]\nL8: Horizon Legacy Northern Water Fish Recipe Dry Dog Food [source category: non-prescription-dog-food]\nL9: Purina Beneful Originals Dry Dog Food [source category: non-prescription-dog-food]\nL10: Purina One Natural Smartblend Lamb & Rice Formula Dry Dog Food [source category: non-prescription-dog-food]\nL11: Wellness Simple Limited Ingredient Adult Wholesome Grains Natural Lamb & Oatmeal Dry Dog Food [source category: non-prescription-dog-food]\nL12: True Solutions Adult Dry Dog Food Natural Chicken [source category: non-prescription-dog-food]"
+        "content": "Allowed categories: dog-food, paper-towels, dish-soap\n\nProducts:\nL7: Scott Multi-Fold 2-Ply Paper Towels, 250 Sheets Per Pack, Case Of 16 Packs [source category: paper-towels]\nL8: Multi-Fold 2-Ply Paper Towels [source category: paper-towels]\nL9: Scott Essential Multifold Paper Towels (01804) [source category: paper-towels]\nL10: Choose-A-Sheet 1-Ply Paper Towels [source category: paper-towels]\nL11: Viva Multi-Surface Choose-A-Sheet Paper Towels [source category: paper-towels]\nL12: Tork Multifold Paper Towels, 2-ply, 189 Sheets/Pack, 16 Packs/Carton [source category: paper-towels]"
       }
     ],
     "output_config": {
@@ -27,7 +27,7 @@
                   },
                   "category": {
                     "type": "string",
-                    "description": "{enum: [\"other\",\"unsure\",\"coffee\",\"dog-food\"]}"
+                    "description": "{enum: [\"other\",\"unsure\",\"dog-food\",\"paper-towels\",\"dish-soap\"]}"
                   }
                 },
                 "additionalProperties": false,
@@ -50,13 +50,13 @@
   },
   "response": {
     "model": "claude-haiku-5-5",
-    "id": "msg_011CgcuVEviLvuHcCK7UXipV",
+    "id": "msg_011CgcvrJNYJPzZmSjHpn3Gt",
     "type": "message",
     "role": "assistant",
     "content": [
       {
         "type": "text",
-        "text": "{\"products\":[{\"id\":\"L7\",\"category\":\"dog-food\"},{\"id\":\"L8\",\"category\":\"dog-food\"},{\"id\":\"L9\",\"category\":\"dog-food\"},{\"id\":\"L10\",\"category\":\"dog-food\"},{\"id\":\"L11\",\"category\":\"dog-food\"},{\"id\":\"L12\",\"category\":\"dog-food\"}]}"
+        "text": "{\"products\":[{\"id\":\"L7\",\"category\":\"paper-towels\"},{\"id\":\"L8\",\"category\":\"paper-towels\"},{\"id\":\"L9\",\"category\":\"paper-towels\"},{\"id\":\"L10\",\"category\":\"paper-towels\"},{\"id\":\"L11\",\"category\":\"paper-towels\"},{\"id\":\"L12\",\"category\":\"paper-towels\"}]}"
       }
     ],
     "container": null,
@@ -64,14 +64,14 @@
     "stop_sequence": null,
     "stop_details": null,
     "usage": {
-      "input_tokens": 814,
+      "input_tokens": 816,
       "cache_creation_input_tokens": 0,
       "cache_read_input_tokens": 0,
       "cache_creation": {
         "ephemeral_5m_input_tokens": 0,
         "ephemeral_1h_input_tokens": 0
       },
-      "output_tokens": 111,
+      "output_tokens": 117,
       "output_tokens_details": {
         "thinking_tokens": 0
       },

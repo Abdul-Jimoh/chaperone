@@ -32,17 +32,26 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>;
 
+/** Server misconfiguration. The message names variables, never their values, so it is safe to return. */
+export class ConfigError extends Error {}
+
 let cached: Env | undefined;
 
 export function env(): Env {
-  cached ??= schema.parse(process.env);
+  if (!cached) {
+    const parsed = schema.safeParse(process.env);
+    if (!parsed.success) {
+      throw new ConfigError(`Invalid env vars: ${[...new Set(parsed.error.issues.map((i) => i.path.join(".")))].join(", ")}`);
+    }
+    cached = parsed.data;
+  }
   return cached;
 }
 
 export function requireEnv<K extends keyof Env>(key: K): NonNullable<Env[K]> {
   const value = env()[key];
   if (value === undefined) {
-    throw new Error(`Missing env var ${key}. See docs/SETUP-CREDENTIALS.md.`);
+    throw new ConfigError(`Missing env var ${key}. See docs/SETUP-CREDENTIALS.md.`);
   }
   return value as NonNullable<Env[K]>;
 }

@@ -116,7 +116,7 @@ describe("shopping agent", () => {
 });
 
 describe("shopping agent, replaying a recorded Haiku run", () => {
-  it("buys the dog food and refuses coffee look-alikes (grinders, canisters)", async () => {
+  it("restocks dog food from Pet Pantry and paper towels + dish soap from Home Basics", async () => {
     const paypal = fakePayPal(Object.fromEntries(DEMO_SHOPS.map((s) => [`${s.key}-app`, s.merchantId])));
     const llm = createLlm({ db, transport: replayTransport(FIXTURE_DIR), budgetUsd: 1.5 });
     const mandate = await seedLinkedMandate(db, DEMO_POLICY);
@@ -131,10 +131,12 @@ describe("shopping agent, replaying a recorded Haiku run", () => {
     );
 
     expect(result.stopped).toBe("done");
-    const paid = await db.select().from(payments);
-    expect(paid).toHaveLength(1);
-    expect(paid[0]).toMatchObject({ status: "captured", payeeMerchantId: DEMO_SHOPS[1]!.merchantId, totalCents: 1_599 });
-    expect(paid[0]!.items.map((i) => i.category)).toEqual(["dog-food"]);
-    expect(result.summary).toMatch(/couldn't buy the coffee/i);
+    const paid = await db.select().from(payments).orderBy(payments.createdAt);
+    expect(paid.map((p) => [p.payeeMerchantId, p.status, p.totalCents])).toEqual([
+      [DEMO_SHOPS[1]!.merchantId, "captured", 1_748],
+      [DEMO_SHOPS[2]!.merchantId, "captured", 3_899],
+    ]);
+    expect(paid.flatMap((p) => p.items.map((i) => i.category))).toEqual(["dog-food", "paper-towels", "dish-soap"]);
+    expect(paid.every((p) => p.runId === "run-recorded-1" && p.mandateHash)).toBe(true);
   });
 });

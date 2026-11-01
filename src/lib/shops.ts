@@ -5,7 +5,7 @@ export type DemoShop = Shop & { sells: string };
 type EnvLike = Partial<Record<string, unknown>>;
 
 const SHOPS = [
-  { env: "A", key: "bean-supply", name: "Bean Supply Co", sells: "coffee beans and ground coffee" },
+  { env: "A", key: "corner-market", name: "Corner Market", sells: "everyday groceries and household basics" },
   { env: "B", key: "pet-pantry", name: "Pet Pantry", sells: "dog and cat food, treats and pet supplies" },
   { env: "C", key: "home-basics", name: "Home Basics", sells: "household and kitchen supplies" },
 ] as const;

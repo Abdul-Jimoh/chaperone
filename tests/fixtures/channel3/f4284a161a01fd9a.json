@@ -1,0 +1,48 @@
+{
+  "query": "dry dog food bag",
+  "limit": 6,
+  "listings": [
+    {
+      "productId": "hjmS7mA",
+      "title": "Dog Food Dry Bag",
+      "description": "This 6L Dog Food Dry Bag by Columbia is designed to keep your dog's food and treats protected and dry during outdoor adventures, from kayaking trips to camping. It features a waterproof construction made from a Thermoplastic and Polyester blend, a roll-top with a buckle closure for security, and a s",
+      "priceCents": 2250,
+      "sourceCategory": "pet-food-containers"
+    },
+    {
+      "productId": "4hIqgGM",
+      "title": "Halo Elevate Healthy Grains Salmon Recipe Dry Dog Food, 20-lb bag",
+      "description": "Halo Elevate Healthy Grains Salmon Recipe is a high-protein dry dog food designed for adult dogs of all breeds. Made with real salmon and a freeze-dried raw coating for enhanced palatability, this formula focuses on five key health areas: digestive health via live probiotics, heart and immunity supp",
+      "priceCents": 8499,
+      "sourceCategory": "non-prescription-dog-food"
+    },
+    {
+      "productId": "W3Njc4l",
+      "title": "Life Protection Formula Natural Grain-Free Lamb & Potatoes Dry Dog Food",
+      "description": "Blue Buffalo Life Protection Formula Natural Grain-Free Lamb & Potatoes Dry Dog Food is a nutritious, grain-free recipe designed for adult dogs of all breeds. Made with real, high-quality lamb as the first ingredient, it is complemented by fruits and vegetables to provide a balanced diet. This formu",
+      "priceCents": 5848,
+      "sourceCategory": "non-prescription-dog-food"
+    },
+    {
+      "productId": "AHrlzie",
+      "title": "Blue Buffalo Life Protection Formula Adult Dry Dog Food",
+      "description": "Blue Buffalo Life Protection Formula Adult Dry Dog Food is a natural, nutrient-dense recipe featuring real beef as the first ingredient. It is formulated with energizing grains, proteins, and prebiotic fibers to support digestion and overall wellness. This recipe includes antioxidant-rich LifeSource",
+      "priceCents": 1748,
+      "sourceCategory": "non-prescription-dog-food"
+    },
+    {
+      "productId": "PKbI12P",
+      "title": "Wellness Simple Limited Ingredient Small Breed Adult Grain-Free Natural Salmon & Potato Dry Dog Food",
+      "description": "Wellness Simple Limited Ingredient Small Breed Adult Grain-Free Natural Salmon & Potato Dry Dog Food is a specialized diet designed for adult small and extra-small breed dogs with food sensitivities. This natural, grain-free formula uses a single source of protein (salmon) and easily digestible carb",
+      "priceCents": 5397,
+      "sourceCategory": "non-prescription-dog-food"
+    },
+    {
+      "productId": "6zhVVH9",
+      "title": "Adult Small Bites Chicken & Barley Recipe Dry Dog Food",
+      "description": "This Hill's Science Diet dry dog food is specially formulated for adult dogs who prefer smaller kibble sizes. The Chicken & Barley Recipe provides high-quality protein for lean muscle maintenance, along with omega-6 fatty acids and Vitamin E to promote healthy skin and a shiny coat. It also contains",
+      "priceCents": 2099,
+      "sourceCategory": "non-prescription-dog-food"
+    }
+  ]
+}

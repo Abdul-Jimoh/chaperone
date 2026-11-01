@@ -1,6 +1,6 @@
 import "server-only";
 import { createDb, type Db } from "@/db/client";
-import { env, requireEnv } from "@/lib/env";
+import { ConfigError, env, requireEnv } from "@/lib/env";
 import type { ApprovalDeps } from "@/lib/payments/approvals";
 import { createPayPalClient } from "@/lib/paypal/client";
 import { createPayeeClients, payeeCredentialsFromEnv } from "@/lib/paypal/payees";
@@ -26,3 +26,16 @@ export function paymentDeps(): ApprovalDeps {
 }
 
 export const paypalCertLoader = httpsCertLoader();
+
+/** Answers 503 naming the missing setting instead of an opaque 500, so a misconfigured deploy is obvious. */
+export function withConfigCheck(handler: (request: Request) => Promise<Response>) {
+  return async (request: Request): Promise<Response> => {
+    try {
+      return await handler(request);
+    } catch (error) {
+      if (!(error instanceof ConfigError)) throw error;
+      console.error(error.message);
+      return Response.json({ error: "server not configured", detail: error.message }, { status: 503 });
+    }
+  };
+}

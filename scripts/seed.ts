@@ -1,13 +1,16 @@
 // Seeds the demo shopper, their linked sandbox wallet and the demo mandate, and issues an MCP agent key.
 // pnpm tsx scripts/seed.ts   (uses DATABASE_URL from .env.local; the key goes to docs/private/agent-key.txt)
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { createDb } from "@/db/client";
-import { paymentMethods, users } from "@/db/schema";
+import { agentKeys, mandates, paymentMethods, users } from "@/db/schema";
+import { revokeMandate } from "@/lib/payments/service";
+import { createPayPalClient } from "@/lib/paypal/client";
+import { createPayeeClients, payeeCredentialsFromEnv } from "@/lib/paypal/payees";
 import { storeConfirmedMandate } from "@/lib/mandates";
-import type { Policy } from "@/lib/policy/schema";
+import { DEMO_STATEMENT, demoPolicy } from "@/lib/demo";
+import { demoShops } from "@/lib/shops";
 import { issueAgentKey } from "@/mcp/keys";
-import { DEMO_STATEMENT, DEMO_TIMEZONE } from "../tests/support/llm-fixtures";
 
 process.loadEnvFile(".env.local");
 const need = (name: string) => {
@@ -21,26 +24,9 @@ const state = existsSync(STATE) ? (JSON.parse(readFileSync(STATE, "utf8")) as { 
 const vaultId = process.env.DEMO_VAULT_ID ?? state.vaultId;
 if (!vaultId) throw new Error("No vaulted wallet: run the vault spike or set DEMO_VAULT_ID.");
 
-const policy: Policy = {
-  version: 1,
-  currency: "USD",
-  timezone: DEMO_TIMEZONE,
-  perTransactionCapCents: 8_000,
-  approvalThresholdCents: 4_000,
-  budgets: [
-    { period: "run", limitCents: 8_000 },
-    { period: "month", limitCents: 15_000 },
-  ],
-  merchants: [
-    { merchantId: need("PAYPAL_SHOP_A_MERCHANT_ID"), name: "Bean Supply Co" },
-    { merchantId: need("PAYPAL_SHOP_B_MERCHANT_ID"), name: "Pet Pantry" },
-    { merchantId: need("PAYPAL_SHOP_C_MERCHANT_ID"), name: "Home Basics" },
-  ],
-  categories: ["coffee", "dog-food"],
-  maxQuantityPerItem: null,
-  schedule: { every: 2, unit: "week" },
-  expiresAt: null,
-};
+const shops = demoShops(process.env);
+if (shops.length !== 3) throw new Error("PAYPAL_SHOP_{A,B,C}_MERCHANT_ID must all be set in .env.local");
+const policy = demoPolicy(shops);
 
 const { db, pool } = createDb(need("DATABASE_URL"), { max: 2 });
 try {
@@ -51,6 +37,22 @@ try {
     .insert(paymentMethods)
     .values({ userId: user.id, paypalPaymentTokenId: vaultId, paypalCustomerId: state.customerId ?? null })
     .onConflictDoNothing();
+
+  // Retire earlier demo mandates the proper way, so any open hold is voided and their agent keys stop working.
+  const deps = {
+    db,
+    platform: createPayPalClient({ clientId: need("PAYPAL_CLIENT_ID"), clientSecret: need("PAYPAL_CLIENT_SECRET") }),
+    payees: createPayeeClients(payeeCredentialsFromEnv(process.env)),
+  };
+  const previous = await db
+    .select({ id: mandates.id })
+    .from(mandates)
+    .where(and(eq(mandates.userId, user.id), eq(mandates.status, "active")));
+  for (const { id } of previous) {
+    const r = await revokeMandate(deps, id);
+    await db.update(agentKeys).set({ revokedAt: new Date() }).where(and(eq(agentKeys.mandateId, id), isNull(agentKeys.revokedAt)));
+    console.log(`revoked earlier mandate ${id} (${r.voided.length} holds released)`);
+  }
 
   const mandate = await storeConfirmedMandate(db, {
     userId: user.id,
