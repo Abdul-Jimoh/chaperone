@@ -4,15 +4,16 @@ import type { Authorization } from "./orders";
 
 export type PayeeCredentials = Record<string, { clientId: string; clientSecret: string }>;
 
-type EnvLike = Partial<Record<string, string | undefined>>;
+type EnvLike = Partial<Record<string, unknown>>;
 
 /** Shop credentials keyed by merchant ID. A shop with an ID but no app credentials is left out. */
 export function payeeCredentialsFromEnv(env: EnvLike): PayeeCredentials {
   const creds: PayeeCredentials = {};
   for (const shop of ["A", "B", "C"]) {
-    const merchantId = env[`PAYPAL_SHOP_${shop}_MERCHANT_ID`];
-    const clientId = env[`PAYPAL_SHOP_${shop}_CLIENT_ID`];
-    const clientSecret = env[`PAYPAL_SHOP_${shop}_CLIENT_SECRET`];
+    const [merchantId, clientId, clientSecret] = ["MERCHANT_ID", "CLIENT_ID", "CLIENT_SECRET"].map((k) => {
+      const v = env[`PAYPAL_SHOP_${shop}_${k}`];
+      return typeof v === "string" ? v : "";
+    });
     if (merchantId && clientId && clientSecret) creds[merchantId] = { clientId, clientSecret };
   }
   return creds;
