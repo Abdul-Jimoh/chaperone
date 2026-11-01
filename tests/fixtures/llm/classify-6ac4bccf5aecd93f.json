@@ -1,0 +1,84 @@
+{
+  "purpose": "classify",
+  "request": {
+    "max_tokens": 2000,
+    "system": "You sort products into a shopper's allowed categories.\nFor each product, answer with the allowed category it plainly is, \"other\" if it is clearly none of them, or \"unsure\" if you can't tell.\nA product only belongs to a category if it is that thing itself, not an accessory, container or tool for it (a coffee canister is not coffee).",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Allowed categories: coffee, dog-food\n\nProducts:\nL13: Airscape® Coffee Bean Bag [source category: food-storage-bags]\nL14: Coffee Bean Bag [source category: food-storage-bags]\nL15: Dimoo Coffee Beans B Blister Packs Figure 'Coffee Bean C' [source category: action-toy-figures]\nL16: CC-50-BK Coffee Beans Container [source category: food-storage-containers]\nL17: Tenugui - Coffee Beans [source category: kitchen-towels]\nL18: Artificial Coffee Beans [source category: vase-fillers]"
+      }
+    ],
+    "output_config": {
+      "effort": "low",
+      "format": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "products": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "{enum: [\"L13\",\"L14\",\"L15\",\"L16\",\"L17\",\"L18\"]}"
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "{enum: [\"other\",\"unsure\",\"coffee\",\"dog-food\"]}"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "category"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "products"
+          ],
+          "description": "{$schema: \"https://json-schema.org/draft/2020-12/schema\"}"
+        }
+      }
+    },
+    "model": "claude-haiku-5-5"
+  },
+  "response": {
+    "model": "claude-haiku-5-5",
+    "id": "msg_011CgcuVpbmR18KaAqjGtbdx",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"products\":[{\"id\":\"L13\",\"category\":\"other\"},{\"id\":\"L14\",\"category\":\"other\"},{\"id\":\"L15\",\"category\":\"other\"},{\"id\":\"L16\",\"category\":\"other\"},{\"id\":\"L17\",\"category\":\"other\"},{\"id\":\"L18\",\"category\":\"other\"}]}"
+      }
+    ],
+    "container": null,
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 731,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 93,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "service_tier": "standard",
+      "inference_geo": "global",
+      "speed": "standard"
+    },
+    "diagnostics": null
+  }
+}

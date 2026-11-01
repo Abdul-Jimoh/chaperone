@@ -1,0 +1,84 @@
+{
+  "purpose": "classify",
+  "request": {
+    "max_tokens": 2000,
+    "system": "You sort products into a shopper's allowed categories.\nFor each product, answer with the allowed category it plainly is, \"other\" if it is clearly none of them, or \"unsure\" if you can't tell.\nA product only belongs to a category if it is that thing itself, not an accessory, container or tool for it (a coffee canister is not coffee).",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Allowed categories: coffee, dog-food\n\nProducts:\nL7: Complete Adult Dry Dog Food [source category: non-prescription-dog-food]\nL8: Horizon Legacy Northern Water Fish Recipe Dry Dog Food [source category: non-prescription-dog-food]\nL9: Purina Beneful Originals Dry Dog Food [source category: non-prescription-dog-food]\nL10: Purina One Natural Smartblend Lamb & Rice Formula Dry Dog Food [source category: non-prescription-dog-food]\nL11: Wellness Simple Limited Ingredient Adult Wholesome Grains Natural Lamb & Oatmeal Dry Dog Food [source category: non-prescription-dog-food]\nL12: True Solutions Adult Dry Dog Food Natural Chicken [source category: non-prescription-dog-food]"
+      }
+    ],
+    "output_config": {
+      "effort": "low",
+      "format": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "products": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "{enum: [\"L7\",\"L8\",\"L9\",\"L10\",\"L11\",\"L12\"]}"
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "{enum: [\"other\",\"unsure\",\"coffee\",\"dog-food\"]}"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "category"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "products"
+          ],
+          "description": "{$schema: \"https://json-schema.org/draft/2020-12/schema\"}"
+        }
+      }
+    },
+    "model": "claude-haiku-5-5"
+  },
+  "response": {
+    "model": "claude-haiku-5-5",
+    "id": "msg_011CgcuVEviLvuHcCK7UXipV",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"products\":[{\"id\":\"L7\",\"category\":\"dog-food\"},{\"id\":\"L8\",\"category\":\"dog-food\"},{\"id\":\"L9\",\"category\":\"dog-food\"},{\"id\":\"L10\",\"category\":\"dog-food\"},{\"id\":\"L11\",\"category\":\"dog-food\"},{\"id\":\"L12\",\"category\":\"dog-food\"}]}"
+      }
+    ],
+    "container": null,
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 814,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 111,
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "service_tier": "standard",
+      "inference_geo": "global",
+      "speed": "standard"
+    },
+    "diagnostics": null
+  }
+}

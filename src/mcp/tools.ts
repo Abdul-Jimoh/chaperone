@@ -3,8 +3,9 @@ import { z } from "zod";
 import { mandates, payments } from "@/db/schema";
 import { spentByPeriod, type Payment } from "@/lib/ledger/reserve";
 import { sweepApprovals } from "@/lib/payments/approvals";
-import { APPROVAL_TIMEOUT_MS, requestPayment, revokeMandate, type PaymentDeps } from "@/lib/payments/service";
-import { describePolicy, formatCents } from "@/lib/policy/describe";
+import { outcomeMessage, shopName } from "@/lib/payments/messages";
+import { requestPayment, revokeMandate, type PaymentDeps } from "@/lib/payments/service";
+import { describePolicy } from "@/lib/policy/describe";
 import { evaluate } from "@/lib/policy/evaluate";
 import { cartSchema, type Policy } from "@/lib/policy/schema";
 
@@ -51,10 +52,6 @@ async function loadMandate(deps: PaymentDeps, mandateId: string) {
   const [mandate] = await deps.db.select().from(mandates).where(eq(mandates.id, mandateId));
   if (!mandate) throw new Error("mandate not found");
   return mandate;
-}
-
-function shopName(policy: Policy, merchantId: string): string {
-  return policy.merchants.find((m) => m.merchantId === merchantId)?.name ?? `unlisted payee ${merchantId}`;
 }
 
 async function budgets(deps: PaymentDeps, mandateId: string, policy: Policy, now: Date) {
@@ -149,29 +146,6 @@ export async function listSpend(deps: PaymentDeps, mandateId: string, limit = 20
   };
 }
 
-function outcomeMessage(policy: Policy, p: Payment, detail: string | undefined): string {
-  const amount = formatCents(p.totalCents);
-  const shop = shopName(policy, p.payeeMerchantId);
-  switch (p.status) {
-    case "captured":
-      return `Paid ${amount} to ${shop}.`;
-    case "pending_approval":
-      return `A hold of ${amount} is placed with ${shop} and the user has been asked to approve it (${p.clauseText}). It is captured if they approve and released if they reject or don't answer within ${APPROVAL_TIMEOUT_MS / 3_600_000} hours. Use list_spend to see the outcome.`;
-    case "denied":
-      return `Denied by the mandate: ${p.clauseText}${detail ? ` (${detail})` : ""}. Nothing was charged.`;
-    case "failed":
-      return "PayPal did not place the hold. Nothing was charged.";
-    case "voided":
-      return "The hold was released. Nothing was charged.";
-    case "authorizing":
-    case "capturing":
-    case "voiding":
-      return "This payment is still being processed. Send the same request again shortly to see the result; it will not pay twice.";
-    default:
-      return `A hold of ${amount} is placed with ${shop} but has not been captured.`;
-  }
-}
-
 export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, input: CartInput) {
   const result = await requestPayment(deps, { mandateId, runId: null, source: "mcp", cart: toCart(input) });
   if (!result.ok) {
@@ -179,12 +153,11 @@ export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, i
   }
   const { policy } = await loadMandate(deps, mandateId);
   const p = result.payment;
-  const detail = p.checks.find((c) => c.clause === p.clauseId)?.detail;
   return {
     ...view(policy, p),
     clause_id: p.clauseId,
     already_requested: result.replayed,
-    message: outcomeMessage(policy, p, detail),
+    message: outcomeMessage(policy, p),
   };
 }
 

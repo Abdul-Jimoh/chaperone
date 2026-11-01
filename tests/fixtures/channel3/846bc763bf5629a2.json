@@ -1,0 +1,48 @@
+{
+  "query": "coffee beans bag Bean Supply Co",
+  "limit": 6,
+  "listings": [
+    {
+      "productId": "OZggNlA",
+      "title": "Airscape® Coffee Bean Bag",
+      "description": "A sustainable, reusable cotton refill bag designed for storing dry goods like coffee, tea, herbs, and spices. This small bag serves as an environmentally friendly alternative to disposable plastic packaging, allowing users to easily refill their Airscape® containers after visiting local roasters or ",
+      "priceCents": 350,
+      "sourceCategory": "food-storage-bags"
+    },
+    {
+      "productId": "S0k1ea1",
+      "title": "Coffee Bean Bag",
+      "description": "This durable cotton refill bag from Planetary Design offers an eco-friendly way to transport and store dry goods. Designed to be used repeatedly, it's a smart investment for reducing plastic waste. Use it to bring your favorite coffee, tea, herbs, or spices from a refill shop back home and easily tr",
+      "priceCents": 400,
+      "sourceCategory": "food-storage-bags"
+    },
+    {
+      "productId": "F49z28Q",
+      "title": "Dimoo Coffee Beans B Blister Packs Figure 'Coffee Bean C'",
+      "description": "This is a collectible figurine from the Pop Mart Dimoo Coffee Beans series, specifically featuring the 'Coffee Bean C' character. The figure depicts a stylized character with brown hair styled in a bun, sitting inside what appears to be a brown paper coffee bag or cup. Based on the visual analysis, ",
+      "priceCents": 13806,
+      "sourceCategory": "action-toy-figures"
+    },
+    {
+      "productId": "J2RJrUQ",
+      "title": "CC-50-BK Coffee Beans Container",
+      "description": "The Campingmoon CC-50-BK Coffee Beans Container is a lightweight, airtight storage canister designed for outdoor use, camping, and travel. This S-size canister features a two-layer design, allowing users to store coffee beans and coffee powder (or other items like tea) in separate, independent compa",
+      "priceCents": 2390,
+      "sourceCategory": "food-storage-containers"
+    },
+    {
+      "productId": "Gdjxcgl",
+      "title": "Tenugui - Coffee Beans",
+      "description": "A traditional Japanese tenugui multi-functional cloth featuring a coffee bean pattern on a brown background. Hand-dyed and made from 100% cotton, this versatile textile can be used as a table napkin, cleaning cloth, tea towel, gift wrapping, or worn as a fashion accessory. The cloth is designed to b",
+      "priceCents": 1800,
+      "sourceCategory": "kitchen-towels"
+    },
+    {
+      "productId": "olezM9a",
+      "title": "Artificial Coffee Beans",
+      "description": "A bulk set of 1000g (approximately 2856 pieces) of artificial coffee beans made from flexible PVC. These realistic, mini food props measure 12.5mm (0.59 inches) in length and are designed for use as vase fillers, coffee shop decor, photography props, and various DIY creative projects.",
+      "priceCents": 2647,
+      "sourceCategory": "vase-fillers"
+    }
+  ]
+}

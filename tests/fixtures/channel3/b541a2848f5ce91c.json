@@ -1,0 +1,48 @@
+{
+  "query": "dry dog food",
+  "limit": 6,
+  "listings": [
+    {
+      "productId": "w4J9ymm",
+      "title": "Complete Adult Dry Dog Food",
+      "description": "Purina Dog Chow Complete Adult Chicken Formula Dry Dog Food is a highly-digestible, 100% complete and balanced nutritional meal designed for adult dogs. Made with real chicken and high-quality proteins for strong muscles, this dry kibble also helps remove plaque for dental health. Each cup provides ",
+      "priceCents": 1599,
+      "sourceCategory": "non-prescription-dog-food"
+    },
+    {
+      "productId": "zrSATl2",
+      "title": "Horizon Legacy Northern Water Fish Recipe Dry Dog Food",
+      "description": "Horizon Legacy Northern Water Fish Recipe Dry Dog Food is a grain-free, high-protein meal formulated to mirror a nutrient-dense ancestral diet. Made in Canada, it features an 80% concentration of animal proteins, specifically wild-caught salmon and whitefish, complemented by fresh fruits, vegetables",
+      "priceCents": 3779,
+      "sourceCategory": "non-prescription-dog-food"
+    },
+    {
+      "productId": "ovoJxiA",
+      "title": "Purina Beneful Originals Dry Dog Food",
+      "description": "Purina Beneful Originals with Natural Salmon is a complete and balanced dry dog food formulated for adult dogs of all breeds. This recipe features real salmon as the first ingredient, accented with real sweet potatoes, green beans, and carrots. It is rich in omega-6 fatty acids to support a shiny co",
+      "priceCents": 4944,
+      "sourceCategory": "non-prescription-dog-food"
+    },
+    {
+      "productId": "JjoATcg",
+      "title": "Purina One Natural Smartblend Lamb & Rice Formula Dry Dog Food",
+      "description": "Purina ONE Natural SmartBlend Lamb & Rice Formula Dry Dog Food is a veterinarian-recommended, high-protein recipe made in the USA. It features real lamb as the first ingredient, promoting healthy skin and a shiny coat with omega-6 fatty acids, vitamins, and minerals. The formula includes 4 antioxida",
+      "priceCents": 4898,
+      "sourceCategory": "non-prescription-dog-food"
+    },
+    {
+      "productId": "EjGSxLs",
+      "title": "Wellness Simple Limited Ingredient Adult Wholesome Grains Natural Lamb & Oatmeal Dry Dog Food",
+      "description": "Wellness Simple Limited Ingredient Adult Wholesome Grains Natural Lamb & Oatmeal Dry Dog Food is a natural, limited-ingredient diet designed for adult dogs with food sensitivities or allergies. Featuring lamb as the sole protein source balanced with oatmeal, this formula avoids common fillers like c",
+      "priceCents": 12399,
+      "sourceCategory": "non-prescription-dog-food"
+    },
+    {
+      "productId": "j0UkMLy",
+      "title": "True Solutions Adult Dry Dog Food Natural Chicken",
+      "description": "This is a natural, dry dog food formulated by veterinarians and nutritionists under the Blue Buffalo True Solutions line, specifically designed to support weight management in adult dogs. The primary ingredient is real chicken, balanced calorically to aid in weight control. It is enhanced with L-Car",
+      "priceCents": 6898,
+      "sourceCategory": "non-prescription-dog-food"
+    }
+  ]
+}

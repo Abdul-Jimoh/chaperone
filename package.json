@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
+    "@channel3/sdk": "^4.6.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "drizzle-orm": "^0.45.4",
     "jose": "^6.2.14",

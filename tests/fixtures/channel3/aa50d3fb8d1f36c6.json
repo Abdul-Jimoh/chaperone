@@ -1,0 +1,48 @@
+{
+  "query": "ground coffee 2 lb",
+  "limit": 6,
+  "listings": [
+    {
+      "productId": "qE77dbl",
+      "title": "Bunn G9-2T DBC Automatic Coffee Grinder w/ 12 lb Hopper Capacity - 120v",
+      "description": "The Bunn G9-2T DBC (33700.0001) is a professional-grade automatic commercial coffee grinder designed for high-volume environments. It features dual transparent hoppers with a combined 12 lb capacity (6 lbs each), allowing for the simultaneous storage and grinding of regular and decaf beans. This low",
+      "priceCents": 174933,
+      "sourceCategory": "coffee-grinders"
+    },
+    {
+      "productId": "E3ws66n",
+      "title": "Bunn FPG-2 DBC Automatic Coffee Grinder",
+      "description": "The Bunn FPG-2 DBC is a commercial-grade automatic coffee grinder designed for medium-volume environments like small coffee shops. It features dual 3 lb. hoppers for a total 6 lb. capacity, allowing operators to store two different bean varieties (e.g., regular and decaf). The grinder is equipped wi",
+      "priceCents": 140500,
+      "sourceCategory": "coffee-grinders"
+    },
+    {
+      "productId": "Skc54I5",
+      "title": "Bunn LPG2E Automatic Coffee Grinder w/ 6 lb Hopper Capacity - 120v",
+      "description": "The Bunn LPG2E (26800.0000) is a commercial low-profile automatic coffee grinder designed for efficiency and space-saving. It features a high-torque, quiet motor and dual clear bean hoppers with a combined capacity of 6 lbs (3 lbs each), allowing for easy monitoring and the ability to grind regular,",
+      "priceCents": 124300,
+      "sourceCategory": "coffee-grinders"
+    },
+    {
+      "productId": "ovY3ccw",
+      "title": "Coffee Duo",
+      "description": "The Coffee Duo is a biodynamic beauty ritual set featuring the Coffee Body Polish and the Coffee Face Mask. Designed to deliver smoother, firmer skin and a radiant glow, this duo utilizes caffeine-packed coffee oils and regeneratively grown coffee grounds. The body polish exfoliates to refine textur",
+      "priceCents": 7200,
+      "sourceCategory": "skin-care-kits-sets"
+    },
+    {
+      "productId": "pftKu68",
+      "title": "Airscape® Kilo Coffee Storage",
+      "description": "This bundle is designed for bulk coffee storage while maximizing freshness. It includes two Airscape® Kilo Coffee Canisters, each with a 2.5 lb capacity, allowing you to store a total of 5 lbs of coffee. One canister features the standard Airscape® plunger lid to remove excess oxygen, while the seco",
+      "priceCents": 12145,
+      "sourceCategory": "food-storage-accessories"
+    },
+    {
+      "productId": "TmehIRg",
+      "title": "Cuisinart Coffee Grinder",
+      "description": "This Cuisinart coffee grinder is designed to grind beans just before brewing for optimal taste. It features stainless steel blades capable of grinding peppercorns, parsley, or basil, as well as creating custom herb mixtures. With a 2.5-ounce capacity, it's sufficient for 12 cups of coffee. The trans",
+      "priceCents": 2121,
+      "sourceCategory": "coffee-grinders"
+    }
+  ]
+}
