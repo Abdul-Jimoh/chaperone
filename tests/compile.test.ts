@@ -1,8 +1,11 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLlm, LlmOutputError } from "@/lib/llm/llm";
 import { replayTransport, type Transport } from "@/lib/llm/transport";
 import { compileMandate, draftToPolicy, type MandateDraft, type Shop } from "@/lib/policy/compile";
+import { mandates } from "@/db/schema";
 import { resetDb, testDb } from "./support/db";
 import { ROGUE, SHOP_A, SHOP_B } from "./support/fixtures";
 import { DEMO_POLICY, DEMO_SHOPS, DEMO_STATEMENT, DEMO_TIMEZONE, FIXTURE_DIR } from "./support/llm-fixtures";
@@ -144,5 +147,25 @@ describe("compileMandate against a recorded Claude response", () => {
     if (!result.ok) return;
     expect(result.policy).toEqual(DEMO_POLICY);
     expect(result.notEnforced).toEqual([expect.stringContaining("household basics")]);
+  });
+});
+
+describe("the LLM never writes a policy the user hasn't confirmed", () => {
+  const sources = (readdirSync("src", { recursive: true }) as string[])
+    .filter((f) => /\.tsx?$/.test(f))
+    .map((f) => ({ file: join("src", f), text: readFileSync(join("src", f), "utf8") }));
+
+  it("compiling a mandate stores nothing", async () => {
+    const llm = createLlm({ db, transport: replayTransport(FIXTURE_DIR), budgetUsd: 1.5 });
+    const result = await compileMandate(llm, { statement: DEMO_STATEMENT, shops: DEMO_SHOPS, timezone: DEMO_TIMEZONE });
+    expect(result.ok).toBe(true);
+    expect(await db.select().from(mandates)).toEqual([]);
+  });
+
+  it("only the confirm step writes mandates, and no LLM, agent or MCP code can reach it", () => {
+    const writers = sources.filter((s) => /\.insert\(mandates\)/.test(s.text)).map((s) => s.file);
+    expect(writers).toEqual([join("src", "lib", "mandates.ts")]);
+    const callers = sources.filter((s) => s.text.includes("storeConfirmedMandate") && !s.file.endsWith("mandates.ts"));
+    for (const { file } of callers) expect(file).not.toMatch(/src\/(lib\/(llm|agent|policy)|mcp)\//);
   });
 });

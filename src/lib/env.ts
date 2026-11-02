@@ -28,6 +28,8 @@ const schema = z.object({
   PAYPAL_SHOP_C_CLIENT_SECRET: optional,
   MANDATE_SIGNING_JWK: optional,
   APPROVAL_LINK_SECRET: optional,
+  // Vercel sends it as a Bearer token on cron invocations.
+  CRON_SECRET: optional,
 });
 
 export type Env = z.infer<typeof schema>;
@@ -51,7 +53,7 @@ export function env(): Env {
 export function requireEnv<K extends keyof Env>(key: K): NonNullable<Env[K]> {
   const value = env()[key];
   if (value === undefined) {
-    throw new ConfigError(`Missing env var ${key}. See docs/SETUP-CREDENTIALS.md.`);
+    throw new ConfigError(`Missing env var ${key}. See .env.example.`);
   }
   return value as NonNullable<Env[K]>;
 }

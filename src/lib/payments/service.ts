@@ -190,7 +190,7 @@ async function placeHold(deps: PaymentDeps, payment: Payment): Promise<Payment> 
   const now = nowOf(deps);
   const { held, revoked } = await deps.db.transaction(async (tx) => {
     // Locking the mandate orders this against a concurrent revoke: whichever commits second sees the other.
-    const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, payment.mandateId)).for("update");
+    const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, payment.mandateId)).for("no key update");
     const waitForUser = payment.decision === "needs_approval" && mandate!.status === "active";
     const [held] = await tx
       .update(payments)
@@ -244,8 +244,8 @@ export async function capturePayment(deps: PaymentDeps, paymentId: string): Prom
   const now = nowOf(deps);
   const claim = await deps.db.transaction(async (tx) => {
     const current = await getPayment(tx, paymentId);
-    const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, current.mandateId)).for("update");
-    const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("update");
+    const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, current.mandateId)).for("no key update");
+    const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("no key update");
     if (payment!.status !== "authorized") return { kind: "skip" as const, payment: payment! };
     if (mandate!.status === "revoked") return { kind: "revoked" as const, payment: payment! };
     if (payment!.anomalyFlags.length) throw new CaptureNotAllowedError(`payment ${paymentId} has anomalies`);
@@ -309,7 +309,7 @@ export type VoidReason = "rejected" | "approval_expired" | "mandate_revoked";
 export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: VoidReason): Promise<Payment> {
   const now = nowOf(deps);
   const claim = await deps.db.transaction(async (tx) => {
-    const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("update");
+    const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("no key update");
     if (!payment || !(OPEN_HOLD as readonly string[]).includes(payment.status)) return null;
     const [claimed] = await tx
       .update(payments)
@@ -369,7 +369,7 @@ export type RevokeResult = { alreadyRevoked: boolean; voided: string[]; stillOpe
 export async function revokeMandate(deps: PaymentDeps, mandateId: string): Promise<RevokeResult> {
   const now = nowOf(deps);
   const { alreadyRevoked, open } = await deps.db.transaction(async (tx) => {
-    const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, mandateId)).for("update");
+    const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, mandateId)).for("no key update");
     if (!mandate) throw new Error(`mandate ${mandateId} not found`);
     const alreadyRevoked = mandate.status === "revoked";
     if (!alreadyRevoked) {

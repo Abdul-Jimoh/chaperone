@@ -1,10 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { agentKeys, payments } from "@/db/schema";
 import type { PaymentDeps } from "@/lib/payments/service";
 import { handleMcpRequest } from "@/mcp/http";
 import { issueAgentKey } from "@/mcp/keys";
+import { requestPaymentTool } from "@/mcp/tools";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, seedLinkedMandate, testDb } from "./support/db";
 import { ROGUE, SHOP_A, SHOP_B, samplePolicy } from "./support/fixtures";
@@ -114,6 +116,21 @@ describe("MCP server", () => {
     });
     expect(data).toMatchObject({ decision: "needs_approval", status: "pending_approval" });
     expect(JSON.stringify(data)).not.toMatch(/eyJ|token|https?:/);
+  });
+
+  it("request_payment first voids approvals left past their timeout, so their budget is free again", async () => {
+    const { paypal, mandate } = await setup();
+    let at = now;
+    const deps: PaymentDeps = { db, platform: paypal.platform, payees: paypal.payees, clock: () => at };
+    const dogFood = { title: "Dry dog food, 12 kg", unit_price_cents: 5_000, quantity: 1, category: "dog-food" };
+    const waiting = await requestPaymentTool(deps, mandate.id, { payee_merchant_id: SHOP_B, items: [dogFood] });
+    if (!("payment_id" in waiting)) throw new Error("expected a payment");
+    expect(waiting.status).toBe("pending_approval");
+
+    at = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+    await requestPaymentTool(deps, mandate.id, { payee_merchant_id: SHOP_A, items: [coffee] });
+    const [stale] = await db.select().from(payments).where(eq(payments.id, waiting.payment_id));
+    expect(stale!.status).toBe("voided");
   });
 
   it("a malformed cart is reported back, not charged", async () => {

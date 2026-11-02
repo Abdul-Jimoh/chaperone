@@ -257,6 +257,20 @@ describe("approvals", () => {
     expect(approval!.outcome).toBe("expired");
   });
 
+  it("stays inside fixed bounds: links die within an hour, approvals within PayPal's 3-day honour period", async () => {
+    const HOUR = 60 * 60 * 1000;
+    const { paypal, deps, advance } = setup();
+    const { result } = await pending(deps);
+    const { token } = (await issueApprovalLink(deps, result.payment.id))!;
+    advance(HOUR + 1_000);
+    await expect(decideApproval(deps, token, "approve")).rejects.toThrow("expired");
+
+    advance(72 * HOUR - 2 * HOUR);
+    const [swept] = await sweepApprovals(deps);
+    expect(swept!.status).toBe("voided");
+    expect(paypal.ops().filter((o) => o.startsWith("capture"))).toEqual([]);
+  });
+
   it("retries a void that failed after a reject", async () => {
     const { paypal, deps } = setup();
     const { result } = await pending(deps);
@@ -302,6 +316,21 @@ describe("revokeMandate", () => {
     const result = ok(await inFlight);
     expect(result.payment.status).toBe("voided");
     expect(paypal.ops()).toEqual(["order:platform-app", "void:shop-a-app"]);
+  });
+
+  it("a hold that needs approval and is still being placed when the user revokes is voided", async () => {
+    const { paypal, deps } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const gate = paypal.holdOrders();
+    const inFlight = requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: bigCart() });
+    await gate.orderStarted;
+    await revokeMandate(deps, mandate.id);
+    gate.release();
+
+    const result = ok(await inFlight);
+    expect(result).toMatchObject({ decision: "needs_approval", payment: { status: "voided" } });
+    expect(paypal.ops()).toEqual(["order:platform-app", "void:shop-b-app"]);
+    expect(await db.select().from(approvals)).toEqual([]);
   });
 
   it("an approval tapped after a revoke changes nothing", async () => {

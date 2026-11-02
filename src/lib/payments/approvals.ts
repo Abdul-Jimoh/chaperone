@@ -39,7 +39,7 @@ export async function issueApprovalLink(
       .select()
       .from(approvals)
       .where(and(eq(approvals.paymentId, paymentId), isNull(approvals.decidedAt)))
-      .for("update");
+      .for("no key update");
     if (!approval || approval.expiresAt <= now) return null;
     const expiresAt = new Date(Math.min(now.getTime() + APPROVAL_LINK_TTL_MS, approval.expiresAt.getTime()));
     const token = await new SignJWT({ pid: paymentId })
@@ -93,12 +93,12 @@ export async function decideApproval(deps: ApprovalDeps, token: string, choice: 
   const now = nowOf(deps);
 
   const outcome = await deps.db.transaction(async (tx) => {
-    const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("update");
+    const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("no key update");
     const [approval] = await tx
       .select()
       .from(approvals)
       .where(and(eq(approvals.paymentId, paymentId), eq(approvals.tokenHash, sha256Hex(token))))
-      .for("update");
+      .for("no key update");
     if (!payment || !approval || approval.decidedAt) {
       throw new InvalidApprovalLinkError("This link has been replaced or used.");
     }

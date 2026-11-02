@@ -68,7 +68,7 @@ async function budgets(deps: PaymentDeps, mandateId: string, policy: Policy, now
   };
 }
 
-// Timeouts are applied lazily, so an agent polling for an outcome also moves expired approvals on.
+// Timeouts are applied lazily, so every agent call also moves expired approvals on and frees their budget.
 async function sweep(deps: PaymentDeps) {
   await sweepApprovals(deps).catch((error) => console.warn("approval sweep failed:", error));
 }
@@ -147,6 +147,7 @@ export async function listSpend(deps: PaymentDeps, mandateId: string, limit = 20
 }
 
 export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, input: CartInput) {
+  await sweep(deps);
   const result = await requestPayment(deps, { mandateId, runId: null, source: "mcp", cart: toCart(input) });
   if (!result.ok) {
     return { error: "invalid_cart", issues: result.issues, message: "The cart is malformed; nothing was recorded or charged." };

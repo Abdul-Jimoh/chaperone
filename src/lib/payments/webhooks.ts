@@ -28,7 +28,7 @@ async function findPayment(tx: Tx, event: WebhookEvent): Promise<Payment | undef
   const authId = authorizationIdOf(event);
   const where = ours ? eq(payments.id, ours) : authId ? eq(payments.paypalAuthorizationId, authId) : undefined;
   if (!where) return undefined;
-  const [payment] = await tx.select().from(payments).where(where).for("update");
+  const [payment] = await tx.select().from(payments).where(where).for("no key update");
   // Our id in custom_id must agree with the authorization PayPal says the event is about.
   if (payment && authId && payment.paypalAuthorizationId && payment.paypalAuthorizationId !== authId) return undefined;
   return payment;

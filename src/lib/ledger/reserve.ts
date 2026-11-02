@@ -61,7 +61,10 @@ export async function decideAndReserve(db: Db, input: DecideInput): Promise<Deci
   const key = cartIdempotencyKey({ mandateId: input.mandateId, cart: input.cart, runId: input.runId, now });
 
   return db.transaction(async (tx) => {
-    const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, input.mandateId)).for("update");
+    // NO KEY UPDATE, never FOR UPDATE, on mandates and payments: these locks still exclude each other,
+    // but don't block the KEY SHARE lock every ledger/reservation insert takes on its foreign keys,
+    // which deadlocked a capture claim against a capture completion.
+    const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, input.mandateId)).for("no key update");
     if (!mandate) throw new MandateNotFoundError(input.mandateId);
 
     const [existing] = await tx.select().from(payments).where(eq(payments.idempotencyKey, key));
