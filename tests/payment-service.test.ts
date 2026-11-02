@@ -257,7 +257,7 @@ describe("approvals", () => {
     expect(approval!.outcome).toBe("expired");
   });
 
-  it("stays inside fixed bounds: links die within an hour, approvals within PayPal's 3-day honour period", async () => {
+  it("stays inside fixed bounds: links die within an hour, approvals within a day (PayPal's honour period is 3)", async () => {
     const HOUR = 60 * 60 * 1000;
     const { paypal, deps, advance } = setup();
     const { result } = await pending(deps);
@@ -265,7 +265,7 @@ describe("approvals", () => {
     advance(HOUR + 1_000);
     await expect(decideApproval(deps, token, "approve")).rejects.toThrow("expired");
 
-    advance(72 * HOUR - 2 * HOUR);
+    advance(25 * HOUR - HOUR);
     const [swept] = await sweepApprovals(deps);
     expect(swept!.status).toBe("voided");
     expect(paypal.ops().filter((o) => o.startsWith("capture"))).toEqual([]);
@@ -331,6 +331,21 @@ describe("revokeMandate", () => {
     expect(result).toMatchObject({ decision: "needs_approval", payment: { status: "voided" } });
     expect(paypal.ops()).toEqual(["order:platform-app", "void:shop-b-app"]);
     expect(await db.select().from(approvals)).toEqual([]);
+  });
+
+  it("a retry after a revoke whose void failed voids the hold instead of capturing it", async () => {
+    const { paypal, deps } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const input = { mandateId: mandate.id, runId: "run-1", source: "agent" as const, cart: cart() };
+    paypal.fail.capture = { status: 500, name: "INTERNAL_SERVER_ERROR", issue: "INTERNAL_SERVICE_ERROR" };
+    expect(ok(await requestPayment(deps, input)).payment.status).toBe("authorized");
+    paypal.fail.void = { status: 500, name: "INTERNAL_SERVER_ERROR", issue: "INTERNAL_SERVICE_ERROR" };
+    expect((await revokeMandate(deps, mandate.id)).stillOpen).toHaveLength(1);
+    delete paypal.fail.capture;
+    delete paypal.fail.void;
+
+    expect(ok(await requestPayment(deps, input)).payment.status).toBe("voided");
+    expect(paypal.ops().filter((o) => o.startsWith("capture"))).toHaveLength(1);
   });
 
   it("an approval tapped after a revoke changes nothing", async () => {

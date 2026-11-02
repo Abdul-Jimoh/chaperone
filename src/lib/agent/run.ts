@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { mandates } from "@/db/schema";
 import type { Llm } from "@/lib/llm/llm";
+import { sweepApprovals } from "@/lib/payments/approvals";
 import { outcomeMessage } from "@/lib/payments/messages";
 import { requestPayment, type PaymentDeps } from "@/lib/payments/service";
 import { describePolicy, formatCents } from "@/lib/policy/describe";
@@ -128,6 +129,8 @@ export async function runShoppingAgent(
         return { productId: l.productId, title: l.title, unitPriceCents: l.priceCents, quantity: i.quantity, category: l.category };
       }),
     };
+    // Timeouts are applied lazily, so expired approvals give their budget back before this one is decided.
+    await sweepApprovals(deps.payments).catch((error) => console.warn("approval sweep failed:", error));
     const result = await requestPayment(deps.payments, { mandateId: input.mandateId, runId: input.runId, source: "agent", cart });
     if (!result.ok) throw new Error(`Cart rejected: ${result.issues.join("; ")}`);
     const message = outcomeMessage(policy, result.payment);
