@@ -1,1 +1,115 @@
 @import "tailwindcss";
+
+@theme {
+  --color-paper: #ece9e3;
+  --color-paper-2: #e3dfd7;
+  --color-paper-3: #d6d1c6;
+  --color-ink: #121211;
+  --color-ink-2: #55524c;
+  --color-ink-3: #8a867d;
+  --color-line: rgb(18 18 17 / 0.14);
+  --color-line-strong: rgb(18 18 17 / 0.32);
+  --color-accent: #e8572a;
+  --color-accent-ink: #b23c15;
+  --color-mint: #bdf4d3;
+  --color-go: #13703f;
+  --color-night: #0d0d0c;
+  --color-night-2: #191917;
+  --color-night-line: rgb(236 233 227 / 0.14);
+
+  --font-sans: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
+  --font-hand: var(--font-architects), "Comic Sans MS", cursive;
+
+  --ease-hold: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-paper);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  button {
+    cursor: pointer;
+  }
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+@utility label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@utility display {
+  font-weight: 600;
+  letter-spacing: -0.055em;
+  line-height: 0.92;
+}
+
+@utility grid-paper {
+  background-image:
+    linear-gradient(to right, rgb(18 18 17 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(18 18 17 / 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@utility grain {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.09;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+/* Text that SplitText reveals is hidden until JS takes over, but only when motion is allowed. */
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-reveal] {
+    visibility: hidden;
+    /* If the script never runs, show the text anyway. */
+    animation: reveal-failsafe 0s 2.5s forwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes reveal-failsafe {
+  to {
+    visibility: visible;
+  }
+}
