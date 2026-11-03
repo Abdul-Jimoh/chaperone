@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }} />
       </head>
-      <body className="min-h-dvh bg-paper font-sans text-ink antialiased">{children}</body>
+      <body className="min-h-dvh bg-paper font-sans text-ink antialiased" suppressHydrationWarning>{children}</body>
     </html>
   );
 }

@@ -41,7 +41,13 @@
     outline-offset: 3px;
     border-radius: 4px;
   }
-  button {
+  a[href],
+  button:not(:disabled),
+  [role="button"],
+  [role="tab"],
+  label[for],
+  select,
+  summary {
     cursor: pointer;
   }
 }
@@ -66,8 +72,8 @@ html.lenis body {
 
 @utility display {
   font-weight: 600;
-  letter-spacing: -0.055em;
-  line-height: 0.92;
+  letter-spacing: -0.04em;
+  line-height: 0.98;
 }
 
 @utility grid-paper {

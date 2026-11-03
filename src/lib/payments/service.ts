@@ -366,7 +366,8 @@ export type RevokeResult = { alreadyRevoked: boolean; voided: string[]; stillOpe
  * mandate.revoked), then every open hold is voided. Holds still being placed void themselves when
  * they see the revoked mandate.
  */
-export async function revokeMandate(deps: PaymentDeps, mandateId: string): Promise<RevokeResult> {
+/** `by` is recorded so the ledger shows whether the user or an agent (over MCP) pulled the plug (R9). */
+export async function revokeMandate(deps: PaymentDeps, mandateId: string, by: "user" | "agent" = "user"): Promise<RevokeResult> {
   const now = nowOf(deps);
   const { alreadyRevoked, open } = await deps.db.transaction(async (tx) => {
     const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, mandateId)).for("no key update");
@@ -378,6 +379,7 @@ export async function revokeMandate(deps: PaymentDeps, mandateId: string): Promi
         mandateId,
         mandateHash: mandate.hash,
         type: "mandate.revoked",
+        detail: { by },
         createdAt: now,
       });
     }

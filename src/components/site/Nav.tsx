@@ -1,21 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { gsap, MOTION, ScrollTrigger, useGSAP } from "@/lib/motion/gsap";
-import { scrollToTarget } from "@/lib/motion/lenis";
+import { lockScroll, scrollToTarget } from "@/lib/motion/lenis";
 import { Clock } from "./Clock";
 
 const LINKS = [
   { href: "#mandate", label: "Mandates" },
-  { href: "#flow", label: "How a payment works" },
+  { href: "#flow", label: "How it works" },
   { href: "#untrusted", label: "Safety" },
   { href: "#developers", label: "Developers" },
 ];
 
 export function Nav() {
   const root = useRef<HTMLElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
 
   useGSAP(
@@ -24,82 +24,71 @@ export function Nav() {
       mm.add(MOTION, () => {
         gsap.from("[data-clasp]", { drawSVG: "50% 50%", duration: 1.2, ease: "hold", delay: 0.15 });
         gsap.from("[data-coin]", { scale: 0, transformOrigin: "50% 50%", duration: 0.7, ease: "back.out(3)", delay: 0.75 });
-        gsap.from("[data-nav-item]", { y: -16, autoAlpha: 0, stagger: 0.05, duration: 0.8, ease: "hold", delay: 0.3 });
-        const hide = gsap.to(root.current, { yPercent: -120, duration: 0.45, ease: "power3.out", paused: true });
-        ScrollTrigger.create({
-          start: 120,
-          end: "max",
-          onUpdate: (self) => (self.direction === 1 ? hide.play() : hide.reverse()),
-        });
       });
-      ScrollTrigger.create({
-        start: 40,
-        end: "max",
-        toggleClass: { targets: root.current, className: "is-scrolled" },
-      });
+      ScrollTrigger.create({ start: 40, end: "max", toggleClass: { targets: root.current, className: "is-scrolled" } });
     },
     { scope: root },
   );
 
   useGSAP(
     () => {
-      if (!menu.current) return;
-      const items = menu.current.querySelectorAll("[data-menu-item]");
+      const el = sheet.current!;
+      const links = el.querySelectorAll("[data-menu-item]");
       if (open) {
-        gsap.set(menu.current, { display: "flex" });
-        gsap.fromTo(menu.current, { clipPath: "circle(0% at 92% 4%)" }, { clipPath: "circle(150% at 92% 4%)", duration: 0.8, ease: "power3.inOut" });
-        gsap.fromTo(items, { yPercent: 110 }, { yPercent: 0, stagger: 0.06, duration: 0.8, ease: "hold", delay: 0.25 });
-      } else if (menu.current.style.display === "flex") {
-        gsap.to(menu.current, {
-          clipPath: "circle(0% at 92% 4%)",
-          duration: 0.6,
-          ease: "power3.inOut",
-          onComplete: () => void gsap.set(menu.current, { display: "none" }),
-        });
+        gsap.set(el, { display: "flex" });
+        gsap.fromTo(el, { yPercent: -100 }, { yPercent: 0, duration: 0.6, ease: "power3.out" });
+        gsap.fromTo(links, { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.05, ease: "power3.out", delay: 0.15 });
+      } else if (el.style.display === "flex") {
+        gsap.to(el, { yPercent: -100, duration: 0.45, ease: "power3.in", onComplete: () => void gsap.set(el, { display: "none" }) });
       }
     },
     { dependencies: [open] },
   );
 
+  useEffect(() => {
+    lockScroll(open);
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   function go(event: React.MouseEvent<HTMLAnchorElement>, href: string) {
     event.preventDefault();
     setOpen(false);
-    scrollToTarget(href, -24);
+    // Wait for the sheet to leave and scrolling to unlock before moving.
+    setTimeout(() => scrollToTarget(href, -16), open ? 350 : 0);
   }
 
   return (
     <>
       <header
         ref={root}
-        className="group fixed inset-x-0 top-0 z-50 px-4 pt-3 sm:px-6 sm:pt-4 [&.is-scrolled_.nav-shell]:border-line [&.is-scrolled_.nav-shell]:bg-paper/80 [&.is-scrolled_.nav-shell]:backdrop-blur-md"
+        data-open={open || undefined}
+        className="group fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4 data-[open]:text-paper [&.is-scrolled:not([data-open])_.nav-shell]:border-line [&.is-scrolled:not([data-open])_.nav-shell]:bg-paper/85 [&.is-scrolled:not([data-open])_.nav-shell]:backdrop-blur-md"
       >
-        <nav className="nav-shell mx-auto flex max-w-[1680px] items-center justify-between gap-4 rounded-2xl border border-transparent px-3 py-2.5 transition-colors duration-500 sm:px-4">
-          <a href="#top" onClick={(e) => go(e, "#top")} className="text-[1.05rem] text-ink" aria-label="Chaperone, back to top">
+        <nav className="nav-shell mx-auto flex h-16 max-w-[1680px] items-center justify-between gap-4 rounded-2xl border border-transparent px-3 transition-colors duration-300 sm:px-4">
+          <a href="#top" onClick={(e) => go(e, "#top")} className="shrink-0 text-[1.05rem]" aria-label="Chaperone, back to top">
             <Logo />
           </a>
-          <ul className="hidden items-center gap-7 lg:flex">
+          <ul className="hidden items-center gap-8 lg:flex">
             {LINKS.map((l) => (
-              <li key={l.href} data-nav-item>
-                <a href={l.href} onClick={(e) => go(e, l.href)} className="group/link relative text-[0.95rem] text-ink-2 transition-colors hover:text-ink">
+              <li key={l.href}>
+                <a href={l.href} onClick={(e) => go(e, l.href)} className="text-[0.95rem] text-ink-2 transition-colors hover:text-ink">
                   {l.label}
-                  <span className="absolute -bottom-1 left-0 h-px w-full origin-right scale-x-0 bg-ink transition-transform duration-500 ease-[var(--ease-hold)] group-hover/link:origin-left group-hover/link:scale-x-100" />
                 </a>
               </li>
             ))}
           </ul>
-          <div className="flex items-center gap-3">
-            <span data-nav-item className="label hidden items-center gap-2 text-ink-2 xl:inline-flex">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-              </span>
+          <div className="flex items-center gap-4">
+            <span className="label hidden items-center gap-2 text-ink-2 xl:inline-flex">
+              <span className="h-2 w-2 rounded-full bg-accent" />
               Sandbox · <Clock />
             </span>
             <a
-              data-nav-item
               href="#flow"
               onClick={(e) => go(e, "#flow")}
-              className="hidden items-center gap-2 rounded-full bg-ink px-4 py-2 text-[0.9rem] font-medium text-paper transition-transform duration-300 hover:scale-[1.03] sm:inline-flex"
+              className="hidden h-10 items-center gap-2 rounded-full bg-ink px-4 text-[0.9rem] font-medium text-paper transition-colors hover:bg-accent sm:inline-flex"
             >
               See a purchase checked <span aria-hidden>↓</span>
             </a>
@@ -108,34 +97,55 @@ export function Nav() {
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}
               aria-controls="mobile-menu"
-              className="relative z-[60] flex h-11 w-11 items-center justify-center rounded-full border border-line-strong lg:hidden"
+              className="relative flex h-11 w-11 items-center justify-center rounded-full border border-current/25 lg:hidden"
             >
               <span className="sr-only">{open ? "Close menu" : "Open menu"}</span>
-              <span className={`absolute h-px w-4 bg-current transition-transform duration-500 ${open ? "rotate-45" : "-translate-y-1"}`} />
-              <span className={`absolute h-px w-4 bg-current transition-transform duration-500 ${open ? "-rotate-45" : "translate-y-1"}`} />
+              <span
+                className="absolute h-[1.5px] w-[18px] bg-current transition-transform duration-300 ease-out"
+                style={{ transform: open ? "rotate(45deg)" : "translateY(-4px)" }}
+              />
+              <span
+                className="absolute h-[1.5px] w-[18px] bg-current transition-transform duration-300 ease-out"
+                style={{ transform: open ? "rotate(-45deg)" : "translateY(4px)" }}
+              />
             </button>
           </div>
         </nav>
       </header>
+
       <div
-        ref={menu}
+        ref={sheet}
         id="mobile-menu"
-        className="fixed inset-0 z-40 hidden flex-col justify-between bg-night px-6 pb-10 pt-28 text-paper lg:hidden"
-        aria-hidden={!open}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu"
+        className="fixed inset-0 z-40 hidden flex-col bg-night px-5 pb-8 pt-24 text-paper sm:px-8 lg:hidden"
       >
-        <ul className="space-y-1">
+        <ul className="flex-1">
           {LINKS.map((l, i) => (
-            <li key={l.href} className="overflow-hidden">
-              <a data-menu-item href={l.href} onClick={(e) => go(e, l.href)} className="flex items-baseline gap-4 py-2 text-[2.6rem] font-medium tracking-[-0.04em]">
-                <span className="label text-paper/50">0{i + 1}</span>
-                {l.label}
+            <li key={l.href} data-menu-item className="border-b border-night-line">
+              <a href={l.href} onClick={(e) => go(e, l.href)} className="flex items-center justify-between py-5">
+                <span className="flex items-baseline gap-4">
+                  <span className="label text-paper/45">0{i + 1}</span>
+                  <span className="text-[clamp(1.8rem,8vw,2.6rem)] font-medium tracking-[-0.035em]">{l.label}</span>
+                </span>
+                <span aria-hidden className="text-paper/50">→</span>
               </a>
             </li>
           ))}
         </ul>
-        <p className="label text-paper/60">
-          Sandbox only · <Clock />
-        </p>
+        <div data-menu-item className="space-y-5">
+          <a
+            href="#flow"
+            onClick={(e) => go(e, "#flow")}
+            className="flex h-12 items-center justify-center rounded-full bg-paper text-[1rem] font-medium text-ink"
+          >
+            See a purchase checked
+          </a>
+          <p className="label flex items-center justify-center gap-2 text-paper/55">
+            <span className="h-2 w-2 rounded-full bg-accent" /> PayPal sandbox · <Clock />
+          </p>
+        </div>
       </div>
     </>
   );

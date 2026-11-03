@@ -66,8 +66,8 @@ export function MandateSection() {
     <section ref={root} id="mandate" className="relative border-t border-line">
       <div data-pin className="mx-auto grid min-h-[100svh] max-w-[1680px] grid-cols-1 gap-12 px-5 py-20 sm:px-8 lg:grid-cols-12 lg:items-center lg:gap-10 lg:py-16">
         <div className="lg:col-span-7">
-          <p className="label mb-6 text-ink-2">[ 01 — The mandate ]</p>
-          <p data-sentence className="text-[clamp(2rem,4.4vw,4.6rem)] font-medium leading-[1.04] tracking-[-0.045em]">
+          <p className="label mb-6 text-ink-2">Your rules, in your words</p>
+          <p data-sentence className="text-[clamp(1.8rem,3.6vw,3.8rem)] font-medium leading-[1.1] tracking-[-0.035em]">
             <span className="text-ink-3">“</span>
             {PHRASES.map((p, i) =>
               p.text.split(" ").map((w, j) => (
@@ -79,8 +79,8 @@ export function MandateSection() {
             <span className="text-ink-3">”</span>
           </p>
           <p className="mt-8 max-w-xl text-[1.02rem] leading-relaxed text-ink-2">
-            Claude compiles your sentence into a typed policy. You read it back in plain words and confirm it. Only then is it signed as an
-            ES256 JWS and stored with its SHA-256 hash. Claude never sees a merchant ID; code attaches those after validation.
+            Claude turns your sentence into exact rules and reads them back to you. Nothing takes effect until you confirm. Then the rules
+            are signed and stored, and every payment is checked against that signed copy.
           </p>
         </div>
 

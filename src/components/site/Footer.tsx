@@ -5,7 +5,6 @@ import { LogoMark } from "@/components/brand/Logo";
 import { gsap, MOTION, SplitText, useGSAP } from "@/lib/motion/gsap";
 import { scrollToTarget } from "@/lib/motion/lenis";
 import { Clock } from "./Clock";
-import { Marquee } from "./Marquee";
 
 export function Footer() {
   const root = useRef<HTMLElement>(null);
@@ -38,11 +37,7 @@ export function Footer() {
 
   return (
     <footer ref={root} className="grain relative overflow-hidden bg-night text-paper">
-      <Marquee
-        items={["Hold", "Check", "Capture", "or void", "Hold", "Check", "Capture", "or void"]}
-        className="border-b border-night-line py-6 text-[clamp(3rem,9vw,8rem)] font-medium leading-none tracking-[-0.05em]"
-      />
-      <div className="relative mx-auto max-w-[1680px] px-5 pt-16 sm:px-8">
+      <div className="relative mx-auto max-w-[1680px] px-5 pt-20 sm:px-8">
         <div className="grid gap-10 md:grid-cols-12">
           <div className="md:col-span-6">
             <p className="max-w-md text-[clamp(1.6rem,2.6vw,2.4rem)] font-medium leading-[1.05] tracking-[-0.04em]">
@@ -53,7 +48,7 @@ export function Footer() {
             <ul className="space-y-2 text-paper/75">
               {[
                 ["#mandate", "Mandates"],
-                ["#flow", "How a payment works"],
+                ["#flow", "How it works"],
                 ["#untrusted", "Safety"],
                 ["#developers", "Developers"],
               ].map(([href, label]) => (

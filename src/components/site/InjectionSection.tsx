@@ -39,16 +39,17 @@ export function InjectionSection() {
     <section ref={root} id="untrusted" className="relative border-t border-line">
       <div className="mx-auto max-w-[1680px] px-5 py-24 sm:px-8 lg:py-32">
         <div className="grid gap-6 lg:grid-cols-12">
-          <p className="label text-ink-2 lg:col-span-4">[ 03 — Untrusted by default ]</p>
+          <p className="label text-ink-2 lg:col-span-4">Safety</p>
           <div className="lg:col-span-8">
-            <Reveal as="h2" by="lines" className="display text-[clamp(2.4rem,6vw,6.2rem)]">
-              The page can say anything. It can’t move your money.
+            <Reveal as="h2" by="lines" className="display text-[clamp(2.1rem,4.6vw,4.4rem)]">
+              A web page can’t talk your agent into overspending.
             </Reveal>
-            <p className="mt-8 max-w-2xl text-[1.05rem] leading-relaxed text-ink-2">
-              Everything the agent reads is treated as hostile: product pages, reviews, search results. The agent only proposes listing ids and
-              quantities. Prices and titles come from the catalogue data, the payee is checked against the shop list you signed and then against
-              PayPal’s own record of the order.
+            <p className="mt-6 max-w-2xl text-[1.1rem] leading-relaxed text-ink-2">
+              Agents read product pages, reviews and search results, and anyone can write those. So Chaperone trusts none of it. The agent only
+              picks a product and a quantity; the price comes from the catalogue, and the shop being paid must be one you approved, checked again
+              against PayPal’s own record.
             </p>
+            <p className="mt-4 max-w-2xl text-[1.1rem] leading-relaxed text-ink-2">Here is a listing that tries it, and what happens:</p>
           </div>
         </div>
 

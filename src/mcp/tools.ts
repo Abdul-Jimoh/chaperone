@@ -163,7 +163,7 @@ export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, i
 }
 
 export async function revokeMandateTool(deps: PaymentDeps, mandateId: string) {
-  const result = await revokeMandate(deps, mandateId);
+  const result = await revokeMandate(deps, mandateId, "agent");
   return {
     revoked: true,
     already_revoked: result.alreadyRevoked,

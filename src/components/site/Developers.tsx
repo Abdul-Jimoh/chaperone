@@ -122,8 +122,8 @@ export function Developers() {
       <div className="relative mx-auto max-w-[1680px] px-5 py-24 sm:px-8 lg:py-32">
         <div className="grid gap-12 lg:grid-cols-12 [&>*]:min-w-0">
           <div className="lg:col-span-5">
-            <p className="label text-paper/60">[ 04 — For developers ]</p>
-            <Reveal as="h2" by="lines" className="display mt-6 text-[clamp(2.4rem,5.2vw,5.4rem)]">
+            <p className="label text-paper/60">For developers</p>
+            <Reveal as="h2" by="lines" className="display mt-5 text-[clamp(2.1rem,4.2vw,4.2rem)]">
               A payment rail with the limits built in.
             </Reveal>
             <p data-dev-in className="mt-8 max-w-lg text-[1.05rem] leading-relaxed text-paper/70">

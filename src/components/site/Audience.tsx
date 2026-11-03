@@ -64,8 +64,8 @@ export function Audience() {
     <section ref={root} className="border-t border-line">
       <div className="mx-auto max-w-[1680px] px-5 py-24 sm:px-8 lg:py-32">
         <div className="grid gap-6 lg:grid-cols-12">
-          <p className="label text-ink-2 lg:col-span-4">[ 05 — Who it’s for ]</p>
-          <Reveal as="h2" by="lines" className="display text-[clamp(2.4rem,6vw,6.2rem)] lg:col-span-8">
+          <p className="label text-ink-2 lg:col-span-4">Who it’s for</p>
+          <Reveal as="h2" by="lines" className="display text-[clamp(2.1rem,4.6vw,4.4rem)] lg:col-span-8">
             Two kinds of people hand an agent a wallet.
           </Reveal>
         </div>
