@@ -1,0 +1,2 @@
+ALTER TABLE "payment_methods" DROP CONSTRAINT "payment_methods_paypal_payment_token_id_unique";--> statement-breakpoint
+ALTER TABLE "payment_methods" ADD CONSTRAINT "payment_methods_user_token" UNIQUE("user_id","paypal_payment_token_id");

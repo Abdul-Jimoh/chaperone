@@ -7,6 +7,11 @@ export function shopName(policy: Policy, merchantId: string): string {
   return policy.merchants.find((m) => m.merchantId === merchantId)?.name ?? `unlisted payee ${merchantId}`;
 }
 
+/** The shop name a person sees; agents get the raw merchant ID from shopName. */
+export function shopLabel(policy: Policy, merchantId: string): string {
+  return policy.merchants.find((m) => m.merchantId === merchantId)?.name ?? "A shop not on your list";
+}
+
 /** What an agent is told about a payment. Plain facts only; the rule text comes from the mandate. */
 export function outcomeMessage(policy: Policy, p: Payment): string {
   const detail = p.checks.find((c) => c.clause === p.clauseId)?.detail;

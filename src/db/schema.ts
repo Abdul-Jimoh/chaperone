@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { Check } from "@/lib/policy/evaluate";
@@ -33,15 +34,20 @@ export const merchants = pgTable("merchants", {
 
 export const paymentMethodStatus = pgEnum("payment_method_status", ["active", "revoked"]);
 
-export const paymentMethods = pgTable("payment_methods", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id),
-  paypalPaymentTokenId: text("paypal_payment_token_id").notNull().unique(),
-  paypalCustomerId: text("paypal_customer_id"),
-  payerEmail: text("payer_email"),
-  status: paymentMethodStatus("status").notNull().default("active"),
-  createdAt: createdAt(),
-});
+export const paymentMethods = pgTable(
+  "payment_methods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    paypalPaymentTokenId: text("paypal_payment_token_id").notNull(),
+    paypalCustomerId: text("paypal_customer_id"),
+    payerEmail: text("payer_email"),
+    status: paymentMethodStatus("status").notNull().default("active"),
+    createdAt: createdAt(),
+  },
+  // Judge-mode shoppers share the sandbox buyer's vaulted wallet, so a token is unique per user, not globally.
+  (t) => [unique("payment_methods_user_token").on(t.userId, t.paypalPaymentTokenId)],
+);
 
 export const mandateStatus = pgEnum("mandate_status", ["active", "revoked"]);
 
