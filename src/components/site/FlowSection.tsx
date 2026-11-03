@@ -55,7 +55,6 @@ export function FlowSection() {
       const marker = root.current!.querySelector<HTMLElement>("[data-marker]")!;
       const shell = marker.querySelector("[data-shell]");
       const glints = marker.querySelectorAll("[data-glint]");
-      const label = marker.querySelector<HTMLElement>("[data-stage-label]");
       const steps = gsap.utils.toArray<HTMLElement>("[data-step]");
       let active: HTMLElement = steps[0]!;
       let current: Stage = "hold";
@@ -74,7 +73,6 @@ export function FlowSection() {
         current = stage;
         gsap.to(shell, { morphSVG: { shape: SHELL[stage], shapeIndex: "auto" }, fill: STAGE_COLOR[stage], duration, ease: "hold", overwrite: true });
         gsap.to(glints, { autoAlpha: stage === "check" ? 1 : 0, duration: duration * 0.6, overwrite: true });
-        if (label) label.textContent = step.dataset.title ?? stage;
       };
 
       // One trigger per card drives the highlight, the shape and the position, so they can't disagree.
@@ -121,19 +119,12 @@ export function FlowSection() {
 
         <div className="mt-14 grid gap-10 lg:mt-20 lg:grid-cols-12">
           <div data-lane className="relative hidden lg:col-span-4 lg:block">
-            <div data-marker className="absolute left-0 top-0 flex items-center gap-8">
+            <div data-marker className="absolute left-0 top-0">
               <svg viewBox="0 0 100 100" className="size-[clamp(9rem,13vw,12rem)] overflow-visible" aria-hidden="true">
                 <path data-shell d={SHELL.hold} fill={STAGE_COLOR.hold} />
                 <circle data-glint cx="31" cy="64" r="7" fill="var(--color-paper)" opacity="0" />
                 <circle data-glint cx="69" cy="64" r="7" fill="var(--color-paper)" opacity="0" />
               </svg>
-              <p className="label text-ink-2">
-                Step
-                <br />
-                <span data-stage-label className="text-ink">
-                  Hold
-                </span>
-              </p>
             </div>
           </div>
 

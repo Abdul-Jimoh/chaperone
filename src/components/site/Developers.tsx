@@ -134,7 +134,7 @@ export function Developers() {
               Chaperone is an MCP server. Give any MCP agent an agent key: the key fixes the mandate, and no tool takes a mandate id, so an agent
               can’t pick a looser one. Retried calls are safe, because the PayPal request id comes from the cart and the mandate.
             </p>
-            <pre data-dev-in className="mt-8 overflow-x-auto rounded-xl border border-night-line bg-night-2 p-4 font-mono text-[0.78rem] leading-relaxed text-paper/80" data-lenis-prevent>
+            <pre data-dev-in className="mt-8 overflow-x-auto rounded-xl border border-night-line bg-night-2 p-4 font-mono text-[0.78rem] leading-relaxed text-paper/80">
               {CONFIG}
             </pre>
           </div>
@@ -159,7 +159,7 @@ export function Developers() {
             </div>
             <div id="tool-panel" role="tabpanel" className="mt-6 overflow-hidden rounded-[1.4rem] border border-night-line bg-night-2">
               <p className="border-b border-night-line px-5 py-4 text-[0.98rem] text-paper/80">{tool.blurb}</p>
-              <div className="grid min-h-68 font-mono text-[0.78rem] leading-relaxed md:grid-cols-2" data-lenis-prevent>
+              <div className="grid min-h-68 font-mono text-[0.78rem] leading-relaxed md:grid-cols-2">
                 <div className="overflow-x-auto border-b border-night-line p-5 md:border-b-0 md:border-r">
                   <p className="label mb-3 text-paper/40">→ arguments</p>
                   <code className="text-paper/85">{lines(tool.request)}</code>
