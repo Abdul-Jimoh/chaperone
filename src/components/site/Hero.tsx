@@ -48,18 +48,17 @@ export function Hero() {
           </p>
           <div data-hero-fade className="mt-8 flex flex-col gap-3 sm:flex-row">
             <a
-              href="#flow"
-              onClick={jump("#flow")}
+              href="/app"
               className="inline-flex h-12 items-center justify-center gap-3 whitespace-nowrap rounded-full bg-ink px-6 font-medium text-paper transition-colors hover:bg-accent"
             >
-              See a purchase checked <span aria-hidden>↓</span>
+              Try the demo <span aria-hidden>→</span>
             </a>
             <a
-              href="#developers"
-              onClick={jump("#developers")}
+              href="#flow"
+              onClick={jump("#flow")}
               className="inline-flex h-12 items-center justify-center whitespace-nowrap rounded-full border border-line-strong px-6 font-medium transition-colors hover:border-ink"
             >
-              For developers (MCP)
+              See how it works <span aria-hidden>↓</span>
             </a>
           </div>
         </div>

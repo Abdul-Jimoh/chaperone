@@ -92,11 +92,10 @@ export function Nav() {
               Sandbox · <Clock />
             </span>
             <a
-              href="#flow"
-              onClick={(e) => go(e, "#flow")}
+              href="/app"
               className="hidden h-10 items-center gap-2 rounded-full bg-ink px-4 text-[0.9rem] font-medium text-paper transition-colors hover:bg-accent sm:inline-flex"
             >
-              See a purchase checked <span aria-hidden>↓</span>
+              Try the demo <span aria-hidden>→</span>
             </a>
             <button
               type="button"
@@ -141,12 +140,8 @@ export function Nav() {
           ))}
         </ul>
         <div data-menu-item className="space-y-5">
-          <a
-            href="#flow"
-            onClick={(e) => go(e, "#flow")}
-            className="flex h-12 items-center justify-center rounded-full bg-paper text-[1rem] font-medium text-ink"
-          >
-            See a purchase checked
+          <a href="/app" className="flex h-12 items-center justify-center rounded-full bg-paper text-[1rem] font-medium text-ink">
+            Try the demo
           </a>
           <p className="label flex items-center justify-center gap-2 text-paper/55">
             <span className="h-2 w-2 rounded-full bg-accent" /> PayPal sandbox · <Clock />
