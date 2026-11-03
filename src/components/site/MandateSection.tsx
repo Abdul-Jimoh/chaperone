@@ -39,7 +39,7 @@ export function MandateSection() {
         const tl = gsap.timeline({
           defaults: { ease: "none" },
           scrollTrigger: ctx.conditions!.desktop
-            ? { trigger: "[data-pin]", start: "top top", end: "+=190%", pin: true, scrub: 0.8 }
+            ? { trigger: "[data-pin]", start: "top top", end: "+=190%", pin: true, scrub: 0.8, anticipatePin: 1 }
             : { trigger: "[data-sentence]", start: "top 75%", end: "bottom 35%", scrub: 0.8 },
         });
         PHRASES.forEach((p, i) => {
@@ -64,7 +64,7 @@ export function MandateSection() {
 
   return (
     <section ref={root} id="mandate" className="relative border-t border-line">
-      <div data-pin className="mx-auto grid min-h-[100svh] max-w-[1680px] grid-cols-1 gap-12 px-5 py-20 sm:px-8 lg:grid-cols-12 lg:items-center lg:gap-10 lg:py-16">
+      <div data-pin className="mx-auto grid min-h-svh max-w-[1680px] grid-cols-1 gap-12 px-5 py-20 sm:px-8 lg:grid-cols-12 lg:items-center lg:gap-10 lg:py-16">
         <div className="lg:col-span-7">
           <p className="label mb-6 text-ink-2">Your rules, in your words</p>
           <p data-sentence className="text-[clamp(1.8rem,3.6vw,3.8rem)] font-medium leading-[1.1] tracking-[-0.035em]">
@@ -85,7 +85,7 @@ export function MandateSection() {
         </div>
 
         <div className="relative lg:col-span-5">
-          <span className="pointer-events-none absolute -top-10 right-2 rotate-[3deg] font-hand text-[1.05rem] text-ink-2">
+          <span className="pointer-events-none absolute -top-10 right-2 rotate-3 font-hand text-[1.05rem] text-ink-2">
             Claude compiles it. You sign it. ↓
           </span>
           <div className="grid-paper overflow-hidden rounded-[1.4rem] border border-line-strong bg-paper-2">
@@ -109,7 +109,7 @@ export function MandateSection() {
               </p>
               <div className="mt-3 flex items-center justify-between gap-3">
                 <span className="label text-ink-2">you confirm → ES256 JWS · sha256 stored</span>
-                <span data-stamp className="rotate-[-6deg] rounded-md border-2 border-go px-2 py-0.5 font-mono text-[0.75rem] font-bold uppercase tracking-wider text-go">
+                <span data-stamp className="-rotate-6 rounded-md border-2 border-go px-2 py-0.5 font-mono text-[0.75rem] font-bold uppercase tracking-wider text-go">
                   signed
                 </span>
               </div>

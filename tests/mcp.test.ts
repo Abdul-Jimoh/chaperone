@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { agentKeys, payments } from "@/db/schema";
+import { agentKeys, ledgerEvents, payments } from "@/db/schema";
 import type { PaymentDeps } from "@/lib/payments/service";
 import { handleMcpRequest } from "@/mcp/http";
 import { issueAgentKey } from "@/mcp/keys";
@@ -148,5 +148,7 @@ describe("MCP server", () => {
     const { data } = await call(client, "request_payment", { payee_merchant_id: SHOP_A, items: [coffee] });
     expect(data).toMatchObject({ decision: "deny", clause_id: "mandate.revoked" });
     expect(paypal.calls).toEqual([]);
+    const [event] = await db.select().from(ledgerEvents).where(eq(ledgerEvents.type, "mandate.revoked"));
+    expect(event!.detail).toEqual({ by: "agent" });
   });
 });

@@ -301,7 +301,7 @@ describe("revokeMandate", () => {
 
     const next = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-3", source: "mcp", cart: cart() }));
     expect(next).toMatchObject({ decision: "deny", clause: { id: "mandate.revoked" } });
-    expect((await events()).filter((e) => e.type === "mandate.revoked")).toHaveLength(1);
+    expect((await events()).filter((e) => e.type === "mandate.revoked").map((e) => e.detail)).toEqual([{ by: "user" }]);
   });
 
   it("a hold still being placed when the user revokes is voided, not captured", async () => {

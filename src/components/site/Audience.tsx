@@ -71,10 +71,10 @@ export function Audience() {
         </div>
 
         <div data-cards className="mt-14 grid gap-5 md:grid-cols-2 lg:mt-20">
-          <article data-card className="flex min-h-[22rem] flex-col justify-between rounded-[1.6rem] bg-mint p-7 text-ink sm:p-9">
+          <article data-card className="flex min-h-88 flex-col justify-between rounded-[1.6rem] bg-mint p-7 text-ink sm:p-9">
             <span className="label">For you</span>
             <div>
-              <h3 className="text-[clamp(1.9rem,3.2vw,3rem)] font-semibold leading-[1] tracking-[-0.045em]">
+              <h3 className="text-[clamp(1.9rem,3.2vw,3rem)] font-semibold leading-none tracking-[-0.045em]">
                 You want an agent to handle the recurring shopping.
               </h3>
               <p className="mt-4 max-w-md text-[1.02rem] leading-relaxed text-ink/75">
@@ -83,10 +83,10 @@ export function Audience() {
               </p>
             </div>
           </article>
-          <article data-card className="flex min-h-[22rem] flex-col justify-between rounded-[1.6rem] bg-ink p-7 text-paper sm:p-9">
+          <article data-card className="flex min-h-88 flex-col justify-between rounded-[1.6rem] bg-ink p-7 text-paper sm:p-9">
             <span className="label text-paper/60">For builders</span>
             <div>
-              <h3 className="text-[clamp(1.9rem,3.2vw,3rem)] font-semibold leading-[1] tracking-[-0.045em]">
+              <h3 className="text-[clamp(1.9rem,3.2vw,3rem)] font-semibold leading-none tracking-[-0.045em]">
                 You’re building a shopping agent and need a payment rail with limits.
               </h3>
               <p className="mt-4 max-w-md text-[1.02rem] leading-relaxed text-paper/70">

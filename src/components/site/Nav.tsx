@@ -25,7 +25,13 @@ export function Nav() {
         gsap.from("[data-clasp]", { drawSVG: "50% 50%", duration: 1.2, ease: "hold", delay: 0.15 });
         gsap.from("[data-coin]", { scale: 0, transformOrigin: "50% 50%", duration: 0.7, ease: "back.out(3)", delay: 0.75 });
       });
-      ScrollTrigger.create({ start: 40, end: "max", toggleClass: { targets: root.current, className: "is-scrolled" } });
+      // A toggleClass trigger switches off at the very end of the page; derive the state from the scroll position instead.
+      ScrollTrigger.create({
+        start: 0,
+        end: "max",
+        onUpdate: (self) => root.current?.classList.toggle("is-scrolled", self.scroll() > 40),
+        onRefresh: (self) => root.current?.classList.toggle("is-scrolled", self.scroll() > 40),
+      });
     },
     { scope: root },
   );
@@ -65,7 +71,7 @@ export function Nav() {
       <header
         ref={root}
         data-open={open || undefined}
-        className="group fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4 data-[open]:text-paper [&.is-scrolled:not([data-open])_.nav-shell]:border-line [&.is-scrolled:not([data-open])_.nav-shell]:bg-paper/85 [&.is-scrolled:not([data-open])_.nav-shell]:backdrop-blur-md"
+        className="group fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4 data-open:text-paper [&.is-scrolled:not([data-open])_.nav-shell]:border-line [&.is-scrolled:not([data-open])_.nav-shell]:bg-paper"
       >
         <nav className="nav-shell mx-auto flex h-16 max-w-[1680px] items-center justify-between gap-4 rounded-2xl border border-transparent px-3 transition-colors duration-300 sm:px-4">
           <a href="#top" onClick={(e) => go(e, "#top")} className="shrink-0 text-[1.05rem]" aria-label="Chaperone, back to top">
@@ -101,11 +107,11 @@ export function Nav() {
             >
               <span className="sr-only">{open ? "Close menu" : "Open menu"}</span>
               <span
-                className="absolute h-[1.5px] w-[18px] bg-current transition-transform duration-300 ease-out"
+                className="absolute h-[1.5px] w-4.5 bg-current transition-transform duration-300 ease-out"
                 style={{ transform: open ? "rotate(45deg)" : "translateY(-4px)" }}
               />
               <span
-                className="absolute h-[1.5px] w-[18px] bg-current transition-transform duration-300 ease-out"
+                className="absolute h-[1.5px] w-4.5 bg-current transition-transform duration-300 ease-out"
                 style={{ transform: open ? "rotate(-45deg)" : "translateY(4px)" }}
               />
             </button>

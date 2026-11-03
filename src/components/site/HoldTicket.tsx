@@ -117,10 +117,12 @@ export function HoldTicket({ className = "" }: { className?: string }) {
           const target = Number(total.dataset.total);
           const counter = { v: 0 };
           const tl = gsap.timeline();
+          const note = q("[data-note]");
           tl.set(scene, { autoAlpha: 1 })
             .from(q("[data-shop]"), { duration: 0.8, scrambleText: { text: "{original}", chars: "upperCase", speed: 0.6 } })
-            .from(q("[data-item]"), { y: 14, autoAlpha: 0, stagger: 0.08, duration: 0.5, ease: "hold" }, "<0.1")
-            .from(q("[data-note]"), { autoAlpha: 0, x: -8, duration: 0.5 }, "<")
+            .from(q("[data-item]"), { y: 14, autoAlpha: 0, stagger: 0.08, duration: 0.5, ease: "hold" }, "<0.1");
+          if (note.length) tl.from(note, { autoAlpha: 0, x: -8, duration: 0.5 }, "<");
+          tl
             .to(counter, {
               v: target,
               duration: 0.9,
@@ -130,7 +132,7 @@ export function HoldTicket({ className = "" }: { className?: string }) {
             .from(q("[data-check]"), { autoAlpha: 0.15, duration: 0.25, stagger: 0.22 }, "-=0.3")
             .from(q("[data-check] svg"), { scale: 0, transformOrigin: "50% 50%", ease: "back.out(3)", duration: 0.4, stagger: 0.22 }, "<")
             .from(q("[data-verdict]"), { scale: 0.6, rotate: -8, autoAlpha: 0, ease: "back.out(2.2)", duration: 0.6 }, "+=0.1")
-            .from(q("[data-outcome]"), { duration: 0.7, scrambleText: { text: "{original}", chars: "01", speed: 0.5 } }, "<0.15")
+            .from(q("[data-outcome]"), { autoAlpha: 0, duration: 0.5 }, "<0.15")
             .to({}, { duration: 2.4 })
             .to(scene, { autoAlpha: 0, y: -10, duration: 0.45, ease: "power2.in" })
             .set(scene, { y: 0 });
@@ -150,7 +152,7 @@ export function HoldTicket({ className = "" }: { className?: string }) {
   return (
     <div
       ref={root}
-      className={`relative overflow-hidden rounded-[1.4rem] border border-line-strong bg-paper/85 shadow-[0_30px_80px_-40px_rgba(18,18,17,0.45)] backdrop-blur-sm ${className}`}
+      className={`relative overflow-hidden rounded-[1.4rem] border border-line-strong bg-paper shadow-[0_30px_80px_-40px_rgba(18,18,17,0.45)] ${className}`}
       role="img"
       aria-label="A purchase being checked: Pet Pantry dog food $26.49 is allowed and captured; Home Basics $44.99 is held for your approval; a $249.90 order to an unknown shop is denied."
     >
@@ -160,11 +162,11 @@ export function HoldTicket({ className = "" }: { className?: string }) {
           <span className="h-1.5 w-1.5 rounded-full bg-accent" /> evaluator
         </span>
       </div>
-      <div className="grid [&>*]:[grid-area:1/1]">
+      <div className="grid grid-cols-1 *:min-w-0 *:[grid-area:1/1]">
         {SCENARIOS.map((s, i) => (
           <div key={s.shop} data-scene className={`p-5 ${i === 0 ? "" : "invisible"}`} aria-hidden>
             <div className="flex items-baseline justify-between gap-3">
-              <span data-shop className="text-[1.35rem] font-semibold tracking-[-0.035em]">
+              <span data-shop className="min-w-0 truncate text-[1.35rem] font-semibold tracking-[-0.035em]">
                 {s.shop}
               </span>
               <span className="label text-ink-3">payee</span>
@@ -186,7 +188,7 @@ export function HoldTicket({ className = "" }: { className?: string }) {
             </ul>
             <div className="mt-3 flex items-baseline justify-between border-t border-line pt-3">
               <span className="label text-ink-2">total</span>
-              <span className="text-[2.2rem] font-semibold tracking-[-0.05em] tabular-nums">
+              <span className="text-[2.2rem] font-semibold tracking-tighter tabular-nums">
                 $<span data-total={s.total}>{s.total}</span>
               </span>
             </div>
@@ -198,11 +200,11 @@ export function HoldTicket({ className = "" }: { className?: string }) {
                 </li>
               ))}
             </ul>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+            <div className="mt-4 flex flex-col items-start gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
               <span data-verdict className={`rounded-full px-3.5 py-1.5 text-[0.95rem] font-semibold tracking-[-0.02em] ${VERDICT_STYLE[s.verdict]}`}>
                 {s.verdict}
               </span>
-              <span className="text-right">
+              <span className="sm:text-right">
                 <span data-outcome className="label block text-ink">
                   {s.outcome}
                 </span>

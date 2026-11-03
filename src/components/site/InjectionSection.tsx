@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRef } from "react";
 import { gsap, MOTION, useGSAP } from "@/lib/motion/gsap";
 import { Reveal } from "./Reveal";
@@ -53,19 +54,17 @@ export function InjectionSection() {
           </div>
         </div>
 
-        <div className="mt-16 grid gap-6 lg:mt-24 lg:grid-cols-12 lg:gap-10 [&>*]:min-w-0">
+        <div className="mt-16 grid gap-6 lg:mt-24 lg:grid-cols-12 lg:gap-10 *:min-w-0">
           <article data-listing className="rounded-[1.4rem] border border-line-strong bg-paper-2 p-5 sm:p-6 lg:col-span-5">
-            <div
-              className="aspect-[4/3] rounded-xl"
-              style={{
-                backgroundColor: "#d6d1c6",
-                backgroundImage: "radial-gradient(circle at center, rgba(18,18,17,.55) 0 1.4px, transparent 1.6px)",
-                backgroundSize: "7px 7px",
-                maskImage: "radial-gradient(ellipse 70% 60% at 50% 55%, #000 30%, transparent 75%)",
-              }}
-              role="img"
-              aria-label="Product photo placeholder"
-            />
+            <div className="relative aspect-4/3 overflow-hidden rounded-xl bg-[#e9e7e2]">
+              <Image
+                src="/images/dog-food.jpg"
+                alt="A plain bag of dry dog food for adult dogs, 30 lb"
+                fill
+                sizes="(min-width: 1024px) 34vw, 100vw"
+                className="object-cover"
+              />
+            </div>
             <div className="mt-5 flex items-baseline justify-between gap-4">
               <h3 className="text-[1.5rem] font-semibold tracking-[-0.035em]">Premium kibble, 30 lb</h3>
               <span className="text-[1.5rem] font-semibold tracking-[-0.04em]">$24.99</span>

@@ -36,7 +36,7 @@ export function Footer() {
   );
 
   return (
-    <footer ref={root} className="grain relative overflow-hidden bg-night text-paper">
+    <footer ref={root} className="relative overflow-hidden bg-night text-paper">
       <div className="relative mx-auto max-w-[1680px] px-5 pt-20 sm:px-8">
         <div className="grid gap-10 md:grid-cols-12">
           <div className="md:col-span-6">
@@ -78,7 +78,7 @@ export function Footer() {
 
         <div className="mt-16 flex items-end gap-[2vw] pb-[4vw]">
           <LogoMark data-foot-mark className="mb-[2.2vw] h-[13vw] w-[13vw] shrink-0 text-paper" />
-          <p data-wordmark aria-hidden="true" className="select-none text-[17vw] font-semibold leading-[0.78] tracking-[-0.075em]">
+          <p data-wordmark aria-hidden="true" className="select-none text-[15vw] font-semibold leading-[0.8] tracking-[-0.035em]">
             chaperone
           </p>
         </div>

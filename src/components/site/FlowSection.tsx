@@ -38,8 +38,8 @@ function Glyph({ stage, className = "" }: { stage: Stage; className?: string }) 
       <path d={SHELL[stage]} fill={stage === "check" ? "currentColor" : STAGE_COLOR[stage]} />
       {stage === "check" && (
         <>
-          <circle cx="31" cy="64" r="7" className="fill-paper group-data-[active]:fill-ink" />
-          <circle cx="69" cy="64" r="7" className="fill-paper group-data-[active]:fill-ink" />
+          <circle cx="31" cy="64" r="7" className="fill-paper group-data-active:fill-ink" />
+          <circle cx="69" cy="64" r="7" className="fill-paper group-data-active:fill-ink" />
         </>
       )}
     </svg>
@@ -51,46 +51,60 @@ export function FlowSection() {
 
   useGSAP(
     () => {
-      const shell = root.current!.querySelector("[data-shell]");
-      const glints = root.current!.querySelectorAll("[data-glint]");
-      const label = root.current!.querySelector<HTMLElement>("[data-stage-label]");
+      const lane = root.current!.querySelector<HTMLElement>("[data-lane]")!;
+      const marker = root.current!.querySelector<HTMLElement>("[data-marker]")!;
+      const shell = marker.querySelector("[data-shell]");
+      const glints = marker.querySelectorAll("[data-glint]");
+      const label = marker.querySelector<HTMLElement>("[data-stage-label]");
       const steps = gsap.utils.toArray<HTMLElement>("[data-step]");
+      let active: HTMLElement = steps[0]!;
       let current: Stage = "hold";
 
-      const activate = (step: HTMLElement) => {
+      // The marker sits level with the active card, centred on it.
+      const laneY = (step: HTMLElement) =>
+        step.getBoundingClientRect().top - lane.getBoundingClientRect().top + step.offsetHeight / 2 - marker.offsetHeight / 2;
+
+      const activate = (step: HTMLElement, animate = true) => {
+        active = step;
         steps.forEach((s) => s.toggleAttribute("data-active", s === step));
         const stage = step.dataset.step as Stage;
+        const duration = animate ? 0.7 : 0;
+        gsap.to(marker, { y: laneY(step), duration, ease: "hold", overwrite: "auto" });
         if (stage === current) return;
         current = stage;
-        gsap.to(shell, { morphSVG: { shape: SHELL[stage], shapeIndex: "auto" }, fill: STAGE_COLOR[stage], duration: 0.7, ease: "hold", overwrite: true });
-        gsap.to(glints, { autoAlpha: stage === "check" ? 1 : 0, scale: stage === "check" ? 1 : 0, transformOrigin: "50% 50%", duration: 0.4, overwrite: true });
+        gsap.to(shell, { morphSVG: { shape: SHELL[stage], shapeIndex: "auto" }, fill: STAGE_COLOR[stage], duration, ease: "hold", overwrite: true });
+        gsap.to(glints, { autoAlpha: stage === "check" ? 1 : 0, duration: duration * 0.6, overwrite: true });
         if (label) label.textContent = step.dataset.title ?? stage;
       };
 
-      // One trigger per row drives both the highlighted row and the glyph, so they can't disagree.
-      steps.forEach((step, i) => {
+      // One trigger per card drives the highlight, the shape and the position, so they can't disagree.
+      // A card is active while it covers the middle of the screen.
+      steps.forEach((step) => {
         ScrollTrigger.create({
           trigger: step,
-          start: "top 60%",
-          end: "bottom 60%",
+          start: "top center",
+          end: "bottom center",
           onToggle: (self) => self.isActive && activate(step),
-          onLeaveBack: () => i === 0 && steps.forEach((s) => s.removeAttribute("data-active")),
         });
       });
+      const realign = () => activate(active, false);
+      ScrollTrigger.addEventListener("refresh", realign);
+      realign();
 
       const mm = gsap.matchMedia();
       mm.add(MOTION, () => {
         steps.forEach((step) =>
           gsap.from(step.querySelectorAll("[data-step-in]"), {
-            y: 28,
+            y: 24,
             autoAlpha: 0,
-            duration: 0.9,
+            duration: 0.8,
             stagger: 0.06,
             ease: "hold",
             scrollTrigger: { trigger: step, start: "top 85%", once: true },
           }),
         );
       });
+      return () => ScrollTrigger.removeEventListener("refresh", realign);
     },
     { scope: root },
   );
@@ -106,15 +120,19 @@ export function FlowSection() {
         </div>
 
         <div className="mt-14 grid gap-10 lg:mt-20 lg:grid-cols-12">
-          <div className="hidden lg:col-span-4 lg:block">
-            <div className="sticky top-32 flex flex-col items-start">
-              <svg viewBox="0 0 100 100" className="h-[clamp(12rem,18vw,17rem)] w-auto overflow-visible" aria-hidden="true">
+          <div data-lane className="relative hidden lg:col-span-4 lg:block">
+            <div data-marker className="absolute left-0 top-0 flex items-center gap-8">
+              <svg viewBox="0 0 100 100" className="size-[clamp(9rem,13vw,12rem)] overflow-visible" aria-hidden="true">
                 <path data-shell d={SHELL.hold} fill={STAGE_COLOR.hold} />
                 <circle data-glint cx="31" cy="64" r="7" fill="var(--color-paper)" opacity="0" />
                 <circle data-glint cx="69" cy="64" r="7" fill="var(--color-paper)" opacity="0" />
               </svg>
-              <p className="label mt-8 text-ink-2">
-                Step: <span data-stage-label className="text-ink">Hold</span>
+              <p className="label text-ink-2">
+                Step
+                <br />
+                <span data-stage-label className="text-ink">
+                  Hold
+                </span>
               </p>
             </div>
           </div>
@@ -125,21 +143,21 @@ export function FlowSection() {
                 key={s.stage}
                 data-step={s.stage}
                 data-title={s.title}
-                className="group rounded-[1.4rem] border border-line-strong p-6 transition-colors duration-500 data-[active]:border-ink data-[active]:bg-ink data-[active]:text-paper sm:p-8"
+                className="group rounded-[1.4rem] border border-line-strong p-6 transition-colors duration-500 data-active:border-ink data-active:bg-ink data-active:text-paper sm:p-8"
               >
                 <div className="flex items-center gap-4 sm:gap-6">
-                  <Glyph stage={s.stage} className="h-10 w-10 shrink-0 lg:hidden" />
-                  <span data-step-in className="label hidden text-ink-3 group-data-[active]:text-paper/55 lg:inline">
+                  <Glyph stage={s.stage} className="size-10 shrink-0 lg:hidden" />
+                  <span data-step-in className="label hidden text-ink-3 group-data-active:text-paper/55 lg:inline">
                     0{i + 1}
                   </span>
                   <h3 data-step-in className="text-[clamp(2.2rem,5vw,4.2rem)] font-semibold leading-none tracking-[-0.045em]">
                     {s.title}
                   </h3>
-                  <span data-step-in className="label ml-auto hidden text-accent-ink group-data-[active]:text-accent sm:inline">
+                  <span data-step-in className="label ml-auto hidden text-accent-ink group-data-active:text-accent sm:inline">
                     {s.tag}
                   </span>
                 </div>
-                <p data-step-in className="mt-4 max-w-2xl text-[1.05rem] leading-relaxed text-ink-2 group-data-[active]:text-paper/75 lg:pl-11">
+                <p data-step-in className="mt-4 max-w-2xl text-[1.05rem] leading-relaxed text-ink-2 group-data-active:text-paper/75 lg:pl-11">
                   {s.body}
                 </p>
               </li>

@@ -1,8 +1,3 @@
-"use client";
-
-import { useRef } from "react";
-import { gsap, MOTION, ScrollTrigger, useGSAP } from "@/lib/motion/gsap";
-
 const W = 1440;
 const H = 900;
 const LINES = 6;
@@ -29,39 +24,12 @@ function line(i: number, phase: number) {
   return smooth(pts);
 }
 
-/** A few faint contour lines behind the hero. Desktop only; they drift slowly while the hero is on screen. */
+/** A few faint, still contour lines behind the hero on desktop. Drawn once: nothing runs while scrolling. */
 export function Contours({ className = "" }: { className?: string }) {
-  const root = useRef<SVGSVGElement>(null);
-
-  useGSAP(
-    () => {
-      const paths = gsap.utils.toArray<SVGPathElement>("path", root.current);
-      const state = { phase: 0 };
-      const draw = () => paths.forEach((p, i) => p.setAttribute("d", line(i, state.phase)));
-      draw();
-      const mm = gsap.matchMedia();
-      mm.add(MOTION, () => {
-        const tick = (_t: number, dt: number) => {
-          state.phase += dt * 0.00008;
-          draw();
-        };
-        const st = ScrollTrigger.create({
-          trigger: root.current,
-          start: "top top",
-          end: "bottom top",
-          onToggle: (self) => (self.isActive ? gsap.ticker.add(tick) : gsap.ticker.remove(tick)),
-        });
-        if (st.isActive) gsap.ticker.add(tick);
-        return () => gsap.ticker.remove(tick);
-      });
-    },
-    { scope: root },
-  );
-
   return (
-    <svg ref={root} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className={className} aria-hidden="true">
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className={className} aria-hidden="true">
       {Array.from({ length: LINES }, (_, i) => (
-        <path key={i} fill="none" stroke="var(--color-ink)" strokeOpacity={0.09} strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
+        <path key={i} d={line(i, 0.6)} fill="none" stroke="var(--color-ink)" strokeOpacity={0.09} strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
       ))}
     </svg>
   );

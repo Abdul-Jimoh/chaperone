@@ -27,7 +27,7 @@ export function Hero() {
   };
 
   return (
-    <section ref={root} id="top" className="relative isolate overflow-hidden pt-24 lg:min-h-[100svh]">
+    <section ref={root} id="top" className="relative isolate overflow-hidden pt-24 lg:min-h-svh">
       <Contours className="absolute inset-0 -z-10 hidden h-full w-full lg:block" />
 
       <div className="mx-auto grid max-w-[1680px] grid-cols-1 gap-12 px-5 pb-16 pt-8 sm:px-8 lg:min-h-[calc(100svh-6rem)] lg:grid-cols-12 lg:items-end lg:gap-10 lg:pb-14">
@@ -42,7 +42,7 @@ export function Hero() {
             <br />
             the money<span className="text-accent">.</span>
           </Reveal>
-          <p data-hero-fade className="mt-8 max-w-[36rem] text-[1.1rem] leading-relaxed text-ink-2 sm:text-[1.2rem]">
+          <p data-hero-fade className="mt-8 max-w-xl text-[1.1rem] leading-relaxed text-ink-2 sm:text-[1.2rem]">
             Letting an AI agent shop for you usually means handing it your card. Chaperone gives it a PayPal wallet with your rules built in:
             every purchase is <span className="text-ink">held first, checked by plain code, then paid or cancelled.</span>
           </p>
@@ -50,14 +50,14 @@ export function Hero() {
             <a
               href="#flow"
               onClick={jump("#flow")}
-              className="inline-flex h-12 items-center justify-center gap-3 rounded-full bg-ink px-6 font-medium text-paper transition-colors hover:bg-accent"
+              className="inline-flex h-12 items-center justify-center gap-3 whitespace-nowrap rounded-full bg-ink px-6 font-medium text-paper transition-colors hover:bg-accent"
             >
-              See how a purchase is checked <span aria-hidden>↓</span>
+              See a purchase checked <span aria-hidden>↓</span>
             </a>
             <a
               href="#developers"
               onClick={jump("#developers")}
-              className="inline-flex h-12 items-center justify-center rounded-full border border-line-strong px-6 font-medium transition-colors hover:border-ink"
+              className="inline-flex h-12 items-center justify-center whitespace-nowrap rounded-full border border-line-strong px-6 font-medium transition-colors hover:border-ink"
             >
               For developers (MCP)
             </a>

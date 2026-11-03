@@ -12,6 +12,8 @@ import { SplitText } from "gsap/SplitText";
 if (typeof window !== "undefined") {
   gsap.registerPlugin(useGSAP, ScrollTrigger, SplitText, MorphSVGPlugin, DrawSVGPlugin, ScrambleTextPlugin, CustomEase);
   CustomEase.create("hold", "0.16, 1, 0.3, 1");
+  // Mobile address bars resize the viewport while scrolling; refreshing on that makes content jump.
+  ScrollTrigger.config({ ignoreMobileResize: true });
 }
 
 export const REDUCED = "(prefers-reduced-motion: reduce)";
