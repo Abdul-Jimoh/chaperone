@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import QRCode from "qrcode";
@@ -35,16 +36,22 @@ export async function confirmMandate() {
   revalidatePath("/app");
 }
 
-export type SimulateResult = { ok: true; scenario: Scenario; decision: string; status: string; rule: string; total: string; shop: string } | { ok: false; error: string };
+export type SimulateResult = ({ ok: true; scenario: Scenario; decision: string; status: string; rule: string; total: string; shop: string } | { ok: false; error: string }) & {
+  nextAttempt: string;
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export async function simulate(_prev: SimulateResult | null, form: FormData): Promise<SimulateResult> {
   const userId = await requireUser();
   const scenario = form.get("scenario") as Scenario;
-  if (!["allowed", "ask", "injected"].includes(scenario)) return { ok: false, error: "Unknown scenario." };
+  const attempt = String(form.get("attempt"));
+  const nextAttempt = randomUUID();
+  if (!["allowed", "ask", "injected"].includes(scenario) || !UUID.test(attempt)) return { ok: false, error: "Unknown scenario.", nextAttempt };
   const deps = paymentDeps();
-  const result = await simulatePurchase(deps, demoWorld(), userId, scenario);
+  const result = await simulatePurchase(deps, demoWorld(), userId, scenario, attempt);
   revalidatePath("/app");
-  if (!result.ok) return { ok: false, error: result.issues.join("; ") };
+  if (!result.ok) return { ok: false, error: result.issues.join("; "), nextAttempt };
   const mandate = (await latestMandate(deps.db, userId))!;
   return {
     ok: true,
@@ -54,6 +61,7 @@ export async function simulate(_prev: SimulateResult | null, form: FormData): Pr
     rule: result.clause.text,
     total: formatCents(result.payment.totalCents),
     shop: shopLabel(mandate.policy, result.payment.payeeMerchantId),
+    nextAttempt,
   };
 }
 

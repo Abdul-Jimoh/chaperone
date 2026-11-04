@@ -110,9 +110,10 @@ async function ownMandate(db: Db, userId: string): Promise<Mandate> {
   return mandate;
 }
 
-export async function simulatePurchase(deps: PaymentDeps, world: DemoWorld, userId: string, scenario: Scenario): Promise<PaymentResult> {
+/** `attemptId` is issued with the page, so a double-click or a resent form is the same purchase, not a second one. */
+export async function simulatePurchase(deps: PaymentDeps, world: DemoWorld, userId: string, scenario: Scenario, attemptId: string): Promise<PaymentResult> {
   const mandate = await ownMandate(deps.db, userId);
-  return requestPayment(deps, { mandateId: mandate.id, runId: `demo-${randomUUID()}`, source: "agent", cart: scenarioCart(world, scenario) });
+  return requestPayment(deps, { mandateId: mandate.id, runId: `demo-${attemptId}`, source: "agent", cart: scenarioCart(world, scenario) });
 }
 
 export async function revokeOwnMandate(deps: PaymentDeps, userId: string) {

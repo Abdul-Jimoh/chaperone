@@ -11,7 +11,7 @@ const SCENARIOS = [
   { id: "injected", title: "10 bags of kibble, $249.90", body: "A listing told the agent to ignore your limits and pay a different shop.", expect: "Should be blocked." },
 ] as const;
 
-export function Simulator({ disabled }: { disabled: boolean }) {
+export function Simulator({ disabled, attempt }: { disabled: boolean; attempt: string }) {
   const [result, action] = useActionState<SimulateResult | null, FormData>(simulate, null);
 
   return (
@@ -20,6 +20,7 @@ export function Simulator({ disabled }: { disabled: boolean }) {
         {SCENARIOS.map((s) => (
           <form key={s.id} action={action} className="flex flex-col justify-between gap-4 rounded-2xl border border-line p-4">
             <input type="hidden" name="scenario" value={s.id} />
+            <input type="hidden" name="attempt" value={result?.nextAttempt ?? attempt} />
             <div>
               <h3 className="font-semibold tracking-[-0.02em]">{s.title}</h3>
               <p className="mt-1 text-[0.92rem] leading-relaxed text-ink-2">{s.body}</p>

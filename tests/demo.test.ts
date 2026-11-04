@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { exportJWK, generateKeyPair, type JWK } from "jose";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -67,7 +68,7 @@ describe("judge-mode demo", () => {
     const wallets = await db.select().from(paymentMethods);
     expect(new Set(wallets.map((w) => w.paypalPaymentTokenId))).toEqual(new Set(["VAULT-TEST-1"]));
 
-    await simulatePurchase(deps, world, a, "allowed");
+    await simulatePurchase(deps, world, a, "allowed", randomUUID());
     expect((await dashboard(db, a))!.recent).toHaveLength(1);
     expect((await dashboard(db, b))!.recent).toHaveLength(0);
   });
@@ -85,7 +86,7 @@ describe("judge-mode demo", () => {
     const id = await shopper();
     const statuses = [];
     for (const s of ["allowed", "ask", "injected"] as const) {
-      const r = await simulatePurchase(deps, world, id, s);
+      const r = await simulatePurchase(deps, world, id, s, randomUUID());
       if (!r.ok) throw new Error("invalid cart");
       statuses.push([r.decision, r.payment.status, r.clause.id]);
     }
@@ -97,11 +98,26 @@ describe("judge-mode demo", () => {
     expect(paypal.ops().filter((o) => o.startsWith("order"))).toHaveLength(2);
   });
 
+  it("a double-click or resent form is one purchase, a new attempt is another", async () => {
+    await seedTemplateWallet();
+    const { deps, paypal } = setup();
+    const id = await shopper();
+    const attempt = randomUUID();
+    const [first, again] = await Promise.all([
+      simulatePurchase(deps, world, id, "allowed", attempt),
+      simulatePurchase(deps, world, id, "allowed", attempt),
+    ]);
+    expect(first.ok && again.ok && first.payment.id === again.payment.id).toBe(true);
+    expect(paypal.ops().filter((o) => o.startsWith("order"))).toHaveLength(1);
+    await simulatePurchase(deps, world, id, "allowed", randomUUID());
+    expect(await db.select().from(payments)).toHaveLength(2);
+  });
+
   it("issues an approval link only to the payment's owner", async () => {
     await seedTemplateWallet();
     const { deps } = setup();
     const [owner, stranger] = [await shopper(), await shopper()];
-    const r = await simulatePurchase(deps, world, owner, "ask");
+    const r = await simulatePurchase(deps, world, owner, "ask", randomUUID());
     if (!r.ok) throw new Error("invalid cart");
     await expect(approvalLinkFor(deps, stranger, r.payment.id)).rejects.toBeInstanceOf(NotYoursError);
     expect((await approvalLinkFor(deps, owner, r.payment.id))?.token).toMatch(/^ey/);
@@ -111,14 +127,14 @@ describe("judge-mode demo", () => {
     await seedTemplateWallet();
     const { deps } = setup();
     const id = await shopper();
-    const r = await simulatePurchase(deps, world, id, "ask");
+    const r = await simulatePurchase(deps, world, id, "ask", randomUUID());
     if (!r.ok) throw new Error("invalid cart");
     expect(await revokeOwnMandate(deps, id)).toMatchObject({ voided: [r.payment.id], stillOpen: [] });
     const [p] = await db.select().from(payments).where(eq(payments.id, r.payment.id));
     expect(p!.status).toBe("voided");
     const [event] = await db.select().from(ledgerEvents).where(eq(ledgerEvents.type, "mandate.revoked"));
     expect(event!.detail).toEqual({ by: "user" });
-    const next = await simulatePurchase(deps, world, id, "allowed");
+    const next = await simulatePurchase(deps, world, id, "allowed", randomUUID());
     expect(next.ok && next.decision).toBe("deny");
   });
 });

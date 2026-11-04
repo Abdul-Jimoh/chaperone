@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { dashboard } from "@/lib/app/demo";
 import { shopLabel } from "@/lib/payments/messages";
 import { describePolicy, formatCents } from "@/lib/policy/describe";
@@ -35,7 +36,7 @@ export function Dashboard({ data }: { data: Data }) {
             <p className="mb-5 leading-relaxed text-ink-2">
               Each button sends a cart through the same checks a real agent gets, with real PayPal sandbox holds.
             </p>
-            <Simulator disabled={!active} />
+            <Simulator disabled={!active} attempt={randomUUID()} />
           </Card>
 
           {waiting.length > 0 && (
