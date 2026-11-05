@@ -5,4 +5,5 @@ CREATE TABLE "rate_limits" (
 	CONSTRAINT "rate_limits_bucket_window_start_pk" PRIMARY KEY("bucket","window_start")
 );
 --> statement-breakpoint
+ALTER TABLE "users" ADD COLUMN "demo_client" text;--> statement-breakpoint
 CREATE INDEX "rate_limits_window_idx" ON "rate_limits" USING btree ("window_start");

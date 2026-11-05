@@ -97,7 +97,7 @@ export async function simulate(_prev: SimulateResult | null, form: FormData): Pr
 
 export async function revoke() {
   const userId = await requireUser();
-  await revokeOwnMandate(paymentDeps(), userId);
+  await refusable(() => revokeOwnMandate(paymentDeps(), userId));
   revalidatePath("/app");
 }
 

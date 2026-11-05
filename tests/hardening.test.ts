@@ -2,7 +2,7 @@ import { createPublicKey, generateKeyPairSync, randomUUID } from "node:crypto";
 import { exportJWK, generateKeyPair, type JWK } from "jose";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mandates, paymentMethods, payments, rateLimits, users } from "@/db/schema";
-import { confirmDemoMandate, createDemoAgentKey, revokeOwnMandate, simulatePurchase, startDemoShopper, type DemoWorld } from "@/lib/app/demo";
+import { approvalLinkFor, confirmDemoMandate, createDemoAgentKey, revokeOwnMandate, simulatePurchase, startDemoShopper, type DemoWorld } from "@/lib/app/demo";
 import type { ApprovalDeps } from "@/lib/payments/approvals";
 import { httpsCertLoader } from "@/lib/paypal/webhooks";
 import { clientId, LIMITS, RateLimitedError, type Limit } from "@/lib/ratelimit";
@@ -58,9 +58,36 @@ describe("demo limits", () => {
   });
 
   it("one visitor's daily allowance can't reach the global caps", () => {
-    const perVisitorPurchases = LIMITS.demoStartPerClientDaily.max * LIMITS.purchasesPerShopperDaily.max;
-    expect(perVisitorPurchases * 5).toBeLessThanOrEqual(LIMITS.purchasesAll.max);
+    expect(LIMITS.purchasesPerClientDaily.max * 30).toBeLessThanOrEqual(LIMITS.purchasesAll.max);
     expect(LIMITS.demoStartPerClientDaily.max * 50).toBeLessThanOrEqual(LIMITS.demoStartAll.max);
+  });
+
+  it("a visitor's purchase allowance covers all their shoppers, old ones included", async () => {
+    await seedTemplateWallet();
+    const d = deps();
+    const old = await startDemoShopper(db, "visitor-a");
+    await confirmDemoMandate(db, world, old, jwk);
+    const fresh = await startDemoShopper(db, "visitor-a");
+    await confirmDemoMandate(db, world, fresh, jwk);
+    const other = await startDemoShopper(db, "visitor-b");
+    await confirmDemoMandate(db, world, other, jwk);
+    await exhaust(LIMITS.purchasesPerClientDaily, "visitor-a");
+    await expect(simulatePurchase(d, world, old, "allowed", randomUUID())).rejects.toBeInstanceOf(RateLimitedError);
+    await expect(simulatePurchase(d, world, fresh, "allowed", randomUUID())).rejects.toBeInstanceOf(RateLimitedError);
+    await expect(simulatePurchase(d, world, other, "allowed", randomUUID())).resolves.toMatchObject({ ok: true });
+  });
+
+  it("limits demo starts per hour and approval links per shopper", async () => {
+    await seedTemplateWallet();
+    const d = deps();
+    for (let i = 0; i < LIMITS.demoStartPerClient.max; i++) await startDemoShopper(db, "busy");
+    await expect(startDemoShopper(db, "busy")).rejects.toBeInstanceOf(RateLimitedError);
+    const id = await startDemoShopper(db, "calm");
+    await confirmDemoMandate(db, world, id, jwk);
+    const r = await simulatePurchase(d, world, id, "ask", randomUUID());
+    if (!r.ok) throw new Error("invalid cart");
+    await exhaust(LIMITS.approvalLinksPerShopper, id);
+    await expect(approvalLinkFor(d, id, r.payment.id)).rejects.toBeInstanceOf(RateLimitedError);
   });
 
   it("the simulator and an MCP agent draw on the same purchase allowance", async () => {
@@ -102,12 +129,20 @@ describe("demo limits", () => {
 
 describe("visitor identity", () => {
   const secret = "secret-one-that-is-long-enough-000";
-  it("counts an IPv6 /64 as one visitor, however the address is written", () => {
+  it("counts an IPv6 /56 as one visitor, however the address is written", () => {
     const a = clientId("2001:db8:1:2::1", secret);
     expect(clientId("2001:0db8:0001:0002:0000:0000:0000:0009", secret)).toBe(a);
-    expect(clientId("2001:db8:1:2:ffff:1:2:3", secret)).toBe(a);
-    expect(clientId("2001:db8:1:3::1", secret)).not.toBe(a);
+    expect(clientId("2001:db8:1:ff:ffff:1:2:3", secret)).toBe(a);
+    expect(clientId("[2001:DB8:1:2::1]", secret)).toBe(a);
+    expect(clientId("2001:db8:1:100::1", secret)).not.toBe(a);
+    expect(clientId("2001:db8:2:2::1", secret)).not.toBe(a);
+  });
+
+  it("counts IPv4 addresses one by one, including when written as IPv4-mapped IPv6", () => {
     expect(clientId("203.0.113.7", secret)).not.toBe(clientId("203.0.113.8", secret));
+    expect(clientId("::ffff:203.0.113.7", secret)).toBe(clientId("203.0.113.7", secret));
+    expect(clientId("0:0:0:0:0:ffff:203.0.113.7", secret)).toBe(clientId("203.0.113.7", secret));
+    expect(clientId("::ffff:198.51.100.1", secret)).not.toBe(clientId("::ffff:203.0.113.7", secret));
   });
 });
 

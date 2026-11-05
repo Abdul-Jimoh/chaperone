@@ -23,6 +23,8 @@ export const users = pgTable("users", {
   displayName: text("display_name").notNull(),
   // Set for judge-mode users so each judge session gets its own isolated copy of the demo.
   demoSessionId: text("demo_session_id").unique(),
+  // Keyed hash of the visitor who started this demo shopper (lib/ratelimit clientId), never the address itself.
+  demoClient: text("demo_client"),
   createdAt: createdAt(),
 });
 

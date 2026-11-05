@@ -149,7 +149,7 @@ export async function listSpend(deps: PaymentDeps, mandateId: string, limit = 20
 
 export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, input: CartInput) {
   const owner = (await loadMandate(deps, mandateId)).userId;
-  const verdict = await hit(deps.db, purchaseChecks(owner), deps.clock?.());
+  const verdict = await hit(deps.db, await purchaseChecks(deps.db, owner), deps.clock?.());
   if (!verdict.ok) return { error: "rate_limited", retry_after_seconds: verdict.retryAfterSec, message: `${refusal(verdict)} Nothing was recorded or charged.` };
   await sweep(deps);
   const result = await requestPayment(deps, { mandateId, runId: null, source: "mcp", cart: toCart(input) });

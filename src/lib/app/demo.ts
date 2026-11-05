@@ -24,7 +24,7 @@ export class NotYoursError extends Error {}
 
 /**
  * A fresh, isolated shopper for one visitor: their own mandate, budget and ledger, sharing only the sandbox wallet.
- * `client` identifies the visitor for rate limiting (see clientId); it is never stored on the shopper.
+ * `client` is the visitor's keyed hash (see clientId), kept so their limits follow them across shoppers.
  */
 export async function startDemoShopper(db: Db, client: string, now = new Date()): Promise<string> {
   const [template] = await db
@@ -46,7 +46,7 @@ export async function startDemoShopper(db: Db, client: string, now = new Date())
   );
 
   return db.transaction(async (tx) => {
-    const [user] = await tx.insert(users).values({ displayName: "Demo shopper", demoSessionId: randomUUID() }).returning();
+    const [user] = await tx.insert(users).values({ displayName: "Demo shopper", demoSessionId: randomUUID(), demoClient: client }).returning();
     await tx.insert(paymentMethods).values({ userId: user!.id, paypalPaymentTokenId: template.token, paypalCustomerId: template.customer });
     return user!.id;
   });
@@ -129,7 +129,7 @@ async function ownMandate(db: Db, userId: string): Promise<Mandate> {
 /** `attemptId` is issued with the page, so a double-click or a resent form is the same purchase, not a second one. */
 export async function simulatePurchase(deps: PaymentDeps, world: DemoWorld, userId: string, scenario: Scenario, attemptId: string): Promise<PaymentResult> {
   const mandate = await ownMandate(deps.db, userId);
-  await enforce(deps.db, purchaseChecks(userId), deps.clock?.());
+  await enforce(deps.db, await purchaseChecks(deps.db, userId), deps.clock?.());
   return requestPayment(deps, { mandateId: mandate.id, runId: `demo-${attemptId}`, source: "agent", cart: scenarioCart(world, scenario) });
 }
 

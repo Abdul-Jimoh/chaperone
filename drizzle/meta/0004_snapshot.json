@@ -1,5 +1,5 @@
 {
-  "id": "dd78e951-e5d3-4389-bda5-ee656e7b90fc",
+  "id": "036b1473-c1cb-447f-969d-8d615f6b47a5",
   "prevId": "bfb00115-917c-456f-bb16-0ff84f6bf399",
   "version": "7",
   "dialect": "postgresql",
@@ -1005,6 +1005,12 @@
         },
         "demo_session_id": {
           "name": "demo_session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "demo_client": {
+          "name": "demo_client",
           "type": "text",
           "primaryKey": false,
           "notNull": false
