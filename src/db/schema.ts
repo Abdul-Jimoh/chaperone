@@ -6,6 +6,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -192,3 +193,14 @@ export const llmUsage = pgTable("llm_usage", {
   sessionId: text("session_id"),
   createdAt: createdAt(),
 });
+
+/** Fixed-window counters. Serverless instances share nothing, so the limits live next to the data. */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    bucket: text("bucket").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    hits: integer("hits").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.bucket, t.windowStart] }), index("rate_limits_window_idx").on(t.windowStart)],
+);

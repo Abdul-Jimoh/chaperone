@@ -1,5 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { PaymentDeps } from "@/lib/payments/service";
+import { hit, LIMITS, refusal } from "@/lib/ratelimit";
 import { resolveAgentKey } from "./keys";
 import { createMcpServer } from "./server";
 
@@ -20,6 +21,13 @@ export async function handleMcpRequest(request: Request, deps: PaymentDeps): Pro
   if (!key) return unauthorized("Send an agent key as a Bearer token.");
   const agent = await resolveAgentKey(deps.db, key, deps.clock?.());
   if (!agent) return unauthorized("Unknown or revoked agent key.");
+  const verdict = await hit(deps.db, [[LIMITS.mcpCallsPerKey, agent.keyId]], deps.clock?.());
+  if (!verdict.ok) {
+    return Response.json(
+      { jsonrpc: "2.0", error: { code: -32029, message: refusal(verdict) }, id: null },
+      { status: 429, headers: { "Retry-After": String(verdict.retryAfterSec) } },
+    );
+  }
 
   const server = createMcpServer(deps, agent.mandateId);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

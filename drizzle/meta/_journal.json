@@ -29,6 +29,13 @@
       "when": 1793730935873,
       "tag": "0003_outgoing_tombstone",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793866281838,
+      "tag": "0004_clever_penance",
+      "breakpoints": true
     }
   ]
 }

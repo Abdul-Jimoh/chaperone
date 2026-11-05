@@ -1,5 +1,4 @@
-import { startDemo } from "@/app/app/actions";
-import { SubmitButton } from "./SubmitButton";
+import { StartForm } from "./StartForm";
 
 const STEPS = [
   { n: "01", title: "A demo shopper", body: "You get a private shopper with a PayPal sandbox wallet already linked. No sign-up, no real money." },
@@ -7,7 +6,7 @@ const STEPS = [
   { n: "03", title: "Purchases, checked", body: "Let the agent try three purchases and watch one go through, one wait for you, and one get blocked." },
 ];
 
-export function StartScreen({ error }: { error?: string }) {
+export function StartScreen() {
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 lg:py-24">
       <p className="label text-ink-2">Try it</p>
@@ -21,12 +20,7 @@ export function StartScreen({ error }: { error?: string }) {
           </li>
         ))}
       </ol>
-      <form action={startDemo} className="mt-12">
-        <SubmitButton pending="Setting up your demo…" className="h-12 px-7 text-[1.02rem]">
-          Start the demo <span aria-hidden>→</span>
-        </SubmitButton>
-      </form>
-      {error && <p className="mt-4 text-accent-ink">{error}</p>}
+      <StartForm />
     </div>
   );
 }

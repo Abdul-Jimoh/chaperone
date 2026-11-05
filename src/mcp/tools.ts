@@ -6,6 +6,7 @@ import { sweepApprovals } from "@/lib/payments/approvals";
 import { outcomeMessage, shopName } from "@/lib/payments/messages";
 import { requestPayment, revokeMandate, type PaymentDeps } from "@/lib/payments/service";
 import { describePolicy } from "@/lib/policy/describe";
+import { hit, LIMITS, refusal } from "@/lib/ratelimit";
 import { evaluate } from "@/lib/policy/evaluate";
 import { cartSchema, type Policy } from "@/lib/policy/schema";
 
@@ -148,6 +149,8 @@ export async function listSpend(deps: PaymentDeps, mandateId: string, limit = 20
 
 export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, input: CartInput) {
   await sweep(deps);
+  const verdict = await hit(deps.db, [[LIMITS.purchasesPerShopper, mandateId], [LIMITS.purchasesAll, null]], deps.clock?.());
+  if (!verdict.ok) return { error: "rate_limited", retry_after_seconds: verdict.retryAfterSec, message: `${refusal(verdict)} Nothing was recorded or charged.` };
   const result = await requestPayment(deps, { mandateId, runId: null, source: "mcp", cart: toCart(input) });
   if (!result.ok) {
     return { error: "invalid_cart", issues: result.issues, message: "The cart is malformed; nothing was recorded or charged." };
