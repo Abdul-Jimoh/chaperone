@@ -1,5 +1,6 @@
 import { createPublicKey, generateKeyPairSync, randomUUID } from "node:crypto";
 import { exportJWK, generateKeyPair, type JWK } from "jose";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mandates, paymentMethods, payments, rateLimits, users } from "@/db/schema";
 import { approvalLinkFor, confirmDemoMandate, createDemoAgentKey, revokeOwnMandate, simulatePurchase, startDemoShopper, type DemoWorld } from "@/lib/app/demo";
@@ -77,6 +78,34 @@ describe("demo limits", () => {
     await expect(simulatePurchase(d, world, other, "allowed", randomUUID())).resolves.toMatchObject({ ok: true });
   });
 
+  it("an MCP agent is held to its visitor's allowance too", async () => {
+    await seedTemplateWallet();
+    const d = deps();
+    const id = await startDemoShopper(db, "visitor-a");
+    const mandate = await confirmDemoMandate(db, world, id, jwk);
+    await exhaust(LIMITS.purchasesPerClientDaily, "visitor-a");
+    const viaAgent = await requestPaymentTool(d, mandate.id, {
+      payee_merchant_id: SHOP_B,
+      items: [{ title: "Dry dog food, 12 kg", unit_price_cents: 2_649, quantity: 1, category: "dog-food" }],
+    });
+    expect(viaAgent).toMatchObject({ error: "rate_limited" });
+    expect(d.paypal.ops()).toEqual([]);
+  });
+
+  it("demo shoppers from before visitors were recorded share one allowance", async () => {
+    await seedTemplateWallet();
+    const d = deps();
+    const ids = [];
+    for (const client of ["x", "y"]) {
+      const id = await startDemoShopper(db, client);
+      await confirmDemoMandate(db, world, id, jwk);
+      await db.update(users).set({ demoClient: null }).where(eq(users.id, id));
+      ids.push(id);
+    }
+    await exhaust(LIMITS.purchasesPerClientDaily, "legacy");
+    for (const id of ids) await expect(simulatePurchase(d, world, id, "allowed", randomUUID())).rejects.toBeInstanceOf(RateLimitedError);
+  });
+
   it("limits demo starts per hour and approval links per shopper", async () => {
     await seedTemplateWallet();
     const d = deps();
@@ -143,6 +172,7 @@ describe("visitor identity", () => {
     expect(clientId("::ffff:203.0.113.7", secret)).toBe(clientId("203.0.113.7", secret));
     expect(clientId("0:0:0:0:0:ffff:203.0.113.7", secret)).toBe(clientId("203.0.113.7", secret));
     expect(clientId("::ffff:198.51.100.1", secret)).not.toBe(clientId("::ffff:203.0.113.7", secret));
+    expect(clientId("203.0.113.7:51234", secret)).toBe(clientId("203.0.113.7", secret));
   });
 });
 

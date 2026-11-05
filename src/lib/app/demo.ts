@@ -7,7 +7,7 @@ import { approvals, mandates, paymentMethods, payments, users } from "@/db/schem
 import { DEMO_STATEMENT, demoPolicy } from "@/lib/demo";
 import { spentByPeriod } from "@/lib/ledger/reserve";
 import { storeConfirmedMandate, type Mandate } from "@/lib/mandates";
-import { issueApprovalLink, type ApprovalDeps } from "@/lib/payments/approvals";
+import { issueApprovalLink, sweepApprovals, type ApprovalDeps } from "@/lib/payments/approvals";
 import { requestPayment, revokeMandate, type PaymentDeps, type PaymentResult } from "@/lib/payments/service";
 import { enforce, LIMITS, purchaseChecks } from "@/lib/ratelimit";
 import { issueAgentKey } from "@/mcp/keys";
@@ -130,6 +130,8 @@ async function ownMandate(db: Db, userId: string): Promise<Mandate> {
 export async function simulatePurchase(deps: PaymentDeps, world: DemoWorld, userId: string, scenario: Scenario, attemptId: string): Promise<PaymentResult> {
   const mandate = await ownMandate(deps.db, userId);
   await enforce(deps.db, await purchaseChecks(deps.db, userId), deps.clock?.());
+  // Like a real agent's request: expired approvals give their budget back before this one is decided.
+  await sweepApprovals(deps).catch((error) => console.warn("approval sweep failed:", error));
   return requestPayment(deps, { mandateId: mandate.id, runId: `demo-${attemptId}`, source: "agent", cart: scenarioCart(world, scenario) });
 }
 

@@ -71,11 +71,13 @@ export function refusal(verdict: Extract<Verdict, { ok: false }>): string {
  * and by the visitor who started the shopper, so keeping old shoppers or agent keys around doesn't add allowance.
  */
 export async function purchaseChecks(db: Db, userId: string): Promise<[Limit, string | null][]> {
-  const [user] = await db.select({ client: users.demoClient }).from(users).where(eq(users.id, userId));
+  const [user] = await db.select({ client: users.demoClient, demo: users.demoSessionId }).from(users).where(eq(users.id, userId));
+  // Demo shoppers started before visitors were recorded share one allowance, so they can't add up either.
+  const client = user?.client ?? (user?.demo ? "legacy" : null);
   return [
     [LIMITS.purchasesPerShopper, userId],
     [LIMITS.purchasesPerShopperDaily, userId],
-    ...(user?.client ? [[LIMITS.purchasesPerClientDaily, user.client] as [Limit, string]] : []),
+    ...(client ? [[LIMITS.purchasesPerClientDaily, client] as [Limit, string]] : []),
     [LIMITS.purchasesAll, null],
   ];
 }
@@ -90,7 +92,7 @@ export async function enforce(db: Db, checks: [Limit, string | null][], now = ne
  * IPv4-mapped addresses count as the IPv4 address they carry.
  */
 function network(raw: string): string {
-  const ip = raw.trim().replace(/^\[|\]$/g, "").replace(/%.*$/, "").toLowerCase();
+  const ip = raw.trim().replace(/^\[|\]$/g, "").replace(/%.*$/, "").replace(/^(\d+\.\d+\.\d+\.\d+):\d+$/, "$1").toLowerCase();
   if (!ip.includes(":")) return ip;
   const mapped = /^(?:0{0,4}:){0,5}(?:0{0,4}:)?ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(ip.replace(/^::/, "0:"));
   if (mapped) return mapped[1]!;
