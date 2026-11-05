@@ -156,6 +156,23 @@ describe("demo limits", () => {
   });
 });
 
+describe("simulated purchases", () => {
+  it("cancel expired approvals first, so their budget is free for the next cart", async () => {
+    await seedTemplateWallet();
+    let now = new Date();
+    const d = { ...deps(), clock: () => now };
+    const id = await startDemoShopper(db, "visitor", now);
+    await confirmDemoMandate(db, world, id, jwk);
+    const waiting = await simulatePurchase(d, world, id, "ask", randomUUID());
+    if (!waiting.ok) throw new Error("invalid cart");
+    expect(waiting.payment.status).toBe("pending_approval");
+    now = new Date(now.getTime() + 25 * 3_600_000);
+    await simulatePurchase(d, world, id, "allowed", randomUUID());
+    const [expired] = await db.select().from(payments).where(eq(payments.id, waiting.payment.id));
+    expect(expired!.status).toBe("voided");
+  });
+});
+
 describe("visitor identity", () => {
   const secret = "secret-one-that-is-long-enough-000";
   it("counts an IPv6 /56 as one visitor, however the address is written", () => {
