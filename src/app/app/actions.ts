@@ -5,15 +5,36 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import QRCode from "qrcode";
-import { approvalLinkFor, confirmDemoMandate, latestMandate, revokeOwnMandate, simulatePurchase, startDemoShopper, type Scenario } from "@/lib/app/demo";
+import {
+  approvalLinkFor,
+  confirmDemoMandate,
+  createDemoAgentKey,
+  latestMandate,
+  NotYoursError,
+  revokeOwnMandate,
+  simulatePurchase,
+  startDemoShopper,
+  type Scenario,
+} from "@/lib/app/demo";
 import { appOrigin } from "@/lib/app/origin";
 import { clearSession, sessionUserId, setSession } from "@/lib/app/session";
 import { requireEnv } from "@/lib/env";
 import { shopLabel } from "@/lib/payments/messages";
 import { formatCents } from "@/lib/policy/describe";
-import { clientId, hit, LIMITS, refusal } from "@/lib/ratelimit";
+import { clientId, RateLimitedError } from "@/lib/ratelimit";
 import { demoWorld, paymentDeps, serverDb } from "@/lib/server";
-import { issueAgentKey } from "@/mcp/keys";
+
+/** Limits and ownership checks become a message on the page instead of an error screen. */
+async function refusable<T>(run: () => Promise<T>): Promise<T | { refused: string }> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof RateLimitedError || error instanceof NotYoursError) return { refused: error.message };
+    throw error;
+  }
+}
+
+const refused = (value: unknown): value is { refused: string } => typeof value === "object" && value !== null && "refused" in value;
 
 async function requireUser(): Promise<string> {
   const userId = await sessionUserId();
@@ -21,16 +42,12 @@ async function requireUser(): Promise<string> {
   return userId;
 }
 
-export async function startDemo(_prev: { error: string } | null): Promise<{ error: string }> {
+export async function startDemo(): Promise<{ error: string }> {
   const h = await headers();
   // Vercel sets x-real-ip itself; a client can't choose it.
   const ip = h.get("x-real-ip") ?? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const verdict = await hit(serverDb(), [
-    [LIMITS.demoStartPerClient, clientId(ip, requireEnv("APPROVAL_LINK_SECRET"))],
-    [LIMITS.demoStartAll, null],
-  ]);
-  if (!verdict.ok) return { error: refusal(verdict) };
-  const userId = await startDemoShopper(serverDb());
+  const userId = await refusable(() => startDemoShopper(serverDb(), clientId(ip, requireEnv("APPROVAL_LINK_SECRET"))));
+  if (refused(userId)) return { error: userId.refused };
   await setSession(userId);
   redirect("/app");
 }
@@ -40,10 +57,12 @@ export async function endDemo() {
   redirect("/");
 }
 
-export async function confirmMandate() {
+export async function confirmMandate(): Promise<{ error: string } | null> {
   const userId = await requireUser();
-  await confirmDemoMandate(serverDb(), demoWorld(), userId, JSON.parse(requireEnv("MANDATE_SIGNING_JWK")));
+  const result = await refusable(() => confirmDemoMandate(serverDb(), demoWorld(), userId, JSON.parse(requireEnv("MANDATE_SIGNING_JWK"))));
+  if (refused(result)) return { error: result.refused };
   revalidatePath("/app");
+  return null;
 }
 
 export type SimulateResult = ({ ok: true; scenario: Scenario; decision: string; status: string; rule: string; total: string; shop: string } | { ok: false; error: string }) & {
@@ -59,12 +78,8 @@ export async function simulate(_prev: SimulateResult | null, form: FormData): Pr
   const nextAttempt = randomUUID();
   if (!["allowed", "ask", "injected"].includes(scenario) || !UUID.test(attempt)) return { ok: false, error: "Unknown scenario.", nextAttempt };
   const deps = paymentDeps();
-  const verdict = await hit(deps.db, [
-    [LIMITS.purchasesPerShopper, userId],
-    [LIMITS.purchasesAll, null],
-  ]);
-  if (!verdict.ok) return { ok: false, error: refusal(verdict), nextAttempt };
-  const result = await simulatePurchase(deps, demoWorld(), userId, scenario, attempt);
+  const result = await refusable(() => simulatePurchase(deps, demoWorld(), userId, scenario, attempt));
+  if (refused(result)) return { ok: false, error: result.refused, nextAttempt };
   revalidatePath("/app");
   if (!result.ok) return { ok: false, error: result.issues.join("; "), nextAttempt };
   const mandate = (await latestMandate(deps.db, userId))!;
@@ -90,9 +105,8 @@ export type LinkResult = { ok: true; url: string; qr: string; expiresAt: string 
 
 export async function approvalLink(paymentId: string): Promise<LinkResult> {
   const userId = await requireUser();
-  const verdict = await hit(serverDb(), [[LIMITS.approvalLinksPerShopper, userId]]);
-  if (!verdict.ok) return { ok: false, error: refusal(verdict) };
-  const link = await approvalLinkFor(paymentDeps(), userId, paymentId);
+  const link = await refusable(() => approvalLinkFor(paymentDeps(), userId, paymentId));
+  if (refused(link)) return { ok: false, error: link.refused };
   if (!link) return { ok: false, error: "This approval has already been decided or has expired." };
   const url = `${await appOrigin()}/approve/${link.token}`;
   const qr = await QRCode.toString(url, { type: "svg", margin: 0, color: { dark: "#121211", light: "#0000" } });
@@ -101,9 +115,7 @@ export async function approvalLink(paymentId: string): Promise<LinkResult> {
 
 export async function createAgentKey(): Promise<{ ok: true; key: string; endpoint: string } | { ok: false; error: string }> {
   const userId = await requireUser();
-  const mandate = await latestMandate(serverDb(), userId);
-  if (!mandate || mandate.status !== "active") return { ok: false, error: "There's no active mandate to attach a key to." };
-  const verdict = await hit(serverDb(), [[LIMITS.agentKeysPerShopper, userId]]);
-  if (!verdict.ok) return { ok: false, error: refusal(verdict) };
-  return { ok: true, key: await issueAgentKey(serverDb(), mandate.id, "dashboard"), endpoint: `${await appOrigin()}/api/mcp` };
+  const key = await refusable(() => createDemoAgentKey(serverDb(), userId));
+  if (refused(key)) return { ok: false, error: key.refused };
+  return { ok: true, key, endpoint: `${await appOrigin()}/api/mcp` };
 }

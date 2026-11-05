@@ -9,6 +9,8 @@ import { spentByPeriod } from "@/lib/ledger/reserve";
 import { storeConfirmedMandate, type Mandate } from "@/lib/mandates";
 import { issueApprovalLink, type ApprovalDeps } from "@/lib/payments/approvals";
 import { requestPayment, revokeMandate, type PaymentDeps, type PaymentResult } from "@/lib/payments/service";
+import { enforce, LIMITS, purchaseChecks } from "@/lib/ratelimit";
+import { issueAgentKey } from "@/mcp/keys";
 import type { DemoShop } from "@/lib/shops";
 
 /** Where the demo's carts are sent: the three sandbox shops, plus a merchant that is none of them. */
@@ -20,8 +22,11 @@ const TEMPLATE_EMAIL = "demo-shopper@example.com";
 export class DemoNotReadyError extends Error {}
 export class NotYoursError extends Error {}
 
-/** A fresh, isolated shopper for one visitor: their own mandate, budget and ledger, sharing only the sandbox wallet. */
-export async function startDemoShopper(db: Db): Promise<string> {
+/**
+ * A fresh, isolated shopper for one visitor: their own mandate, budget and ledger, sharing only the sandbox wallet.
+ * `client` identifies the visitor for rate limiting (see clientId); it is never stored on the shopper.
+ */
+export async function startDemoShopper(db: Db, client: string, now = new Date()): Promise<string> {
   const [template] = await db
     .select({ token: paymentMethods.paypalPaymentTokenId, customer: paymentMethods.paypalCustomerId })
     .from(paymentMethods)
@@ -30,6 +35,15 @@ export async function startDemoShopper(db: Db): Promise<string> {
     .orderBy(desc(paymentMethods.createdAt))
     .limit(1);
   if (!template) throw new DemoNotReadyError("The demo wallet isn't set up yet (run scripts/seed.ts).");
+  await enforce(
+    db,
+    [
+      [LIMITS.demoStartPerClient, client],
+      [LIMITS.demoStartPerClientDaily, client],
+      [LIMITS.demoStartAll, null],
+    ],
+    now,
+  );
 
   return db.transaction(async (tx) => {
     const [user] = await tx.insert(users).values({ displayName: "Demo shopper", demoSessionId: randomUUID() }).returning();
@@ -46,6 +60,7 @@ export function demoDraft(world: DemoWorld) {
 export async function confirmDemoMandate(db: Db, world: DemoWorld, userId: string, signingJwk: JWK): Promise<Mandate> {
   const current = await activeMandate(db, userId);
   if (current) return current;
+  await enforce(db, [[LIMITS.mandatesPerShopper, userId]]);
   const { statement, policy } = demoDraft(world);
   return storeConfirmedMandate(db, { userId, statement, policy, signingJwk });
 }
@@ -114,7 +129,15 @@ async function ownMandate(db: Db, userId: string): Promise<Mandate> {
 /** `attemptId` is issued with the page, so a double-click or a resent form is the same purchase, not a second one. */
 export async function simulatePurchase(deps: PaymentDeps, world: DemoWorld, userId: string, scenario: Scenario, attemptId: string): Promise<PaymentResult> {
   const mandate = await ownMandate(deps.db, userId);
+  await enforce(deps.db, purchaseChecks(userId), deps.clock?.());
   return requestPayment(deps, { mandateId: mandate.id, runId: `demo-${attemptId}`, source: "agent", cart: scenarioCart(world, scenario) });
+}
+
+export async function createDemoAgentKey(db: Db, userId: string): Promise<string> {
+  const mandate = await activeMandate(db, userId);
+  if (!mandate) throw new NotYoursError("There's no active mandate to attach a key to.");
+  await enforce(db, [[LIMITS.agentKeysPerShopper, userId]]);
+  return issueAgentKey(db, mandate.id, "dashboard");
 }
 
 export async function revokeOwnMandate(deps: PaymentDeps, userId: string) {
@@ -130,5 +153,6 @@ export async function approvalLinkFor(deps: ApprovalDeps, userId: string, paymen
     .innerJoin(mandates, eq(mandates.id, payments.mandateId))
     .where(and(eq(payments.id, paymentId), eq(mandates.userId, userId)));
   if (!row) throw new NotYoursError("That payment isn't yours.");
+  await enforce(deps.db, [[LIMITS.approvalLinksPerShopper, userId]], deps.clock?.());
   return issueApprovalLink(deps, paymentId);
 }

@@ -1,7 +1,6 @@
-import { confirmMandate } from "@/app/app/actions";
 import { describePolicy } from "@/lib/policy/describe";
 import type { Policy } from "@/lib/policy/schema";
-import { SubmitButton } from "./SubmitButton";
+import { ConfirmForm } from "./ConfirmForm";
 import { Card } from "./ui";
 
 export function Onboarding({ statement, policy }: { statement: string; policy: Policy }) {
@@ -35,10 +34,7 @@ export function Onboarding({ statement, policy }: { statement: string; policy: P
               </li>
             ))}
           </ul>
-          <form action={confirmMandate} className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[0.92rem] text-ink-2">Nothing takes effect until you confirm. Then the rules are signed and stored with their hash.</p>
-            <SubmitButton pending="Signing…">Confirm and sign</SubmitButton>
-          </form>
+          <ConfirmForm />
         </Card>
       </div>
     </div>

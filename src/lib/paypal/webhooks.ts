@@ -58,15 +58,20 @@ export function assertPayPalCertUrl(certUrl: string): URL {
 
 export type CertLoader = (certUrl: URL, now: Date) => Promise<KeyObject>;
 
-export function httpsCertLoader(fetchImpl: typeof fetch = fetch): CertLoader {
-  const cache = new Map<string, X509Certificate>();
+type Cert = Pick<X509Certificate, "validFrom" | "validTo" | "publicKey">;
+
+export function httpsCertLoader(fetchImpl: typeof fetch = fetch, parse: (pem: string) => Cert = (pem) => new X509Certificate(pem)): CertLoader {
+  const cache = new Map<string, Cert>();
   return async (certUrl, now) => {
-    let cert = cache.get(certUrl.href);
+    // Keyed without the query string and bounded: the URL comes from an unauthenticated request.
+    const key = certUrl.origin + certUrl.pathname;
+    let cert = cache.get(key);
     if (!cert) {
-      const res = await fetchImpl(certUrl, { redirect: "error" });
+      if (cache.size >= 16) cache.delete(cache.keys().next().value!);
+      const res = await fetchImpl(key, { redirect: "error" });
       if (!res.ok) throw new WebhookVerificationError(`cert fetch failed: ${res.status}`);
-      cert = new X509Certificate(await res.text());
-      cache.set(certUrl.href, cert);
+      cert = parse(await res.text());
+      cache.set(key, cert);
     }
     if (now < new Date(cert.validFrom) || now > new Date(cert.validTo)) {
       throw new WebhookVerificationError("signing certificate is not currently valid");

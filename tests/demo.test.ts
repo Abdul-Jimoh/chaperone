@@ -50,14 +50,14 @@ function setup() {
 }
 
 async function shopper() {
-  const id = await startDemoShopper(db);
+  const id = await startDemoShopper(db, "test-client");
   await confirmDemoMandate(db, world, id, jwk);
   return id;
 }
 
 describe("judge-mode demo", () => {
   it("refuses to start before the shared sandbox wallet is seeded", async () => {
-    await expect(startDemoShopper(db)).rejects.toBeInstanceOf(DemoNotReadyError);
+    await expect(startDemoShopper(db, "test-client")).rejects.toBeInstanceOf(DemoNotReadyError);
   });
 
   it("gives each visitor their own shopper, mandate and ledger, sharing only the sandbox wallet", async () => {

@@ -29,6 +29,17 @@ export async function handleMcpRequest(request: Request, deps: PaymentDeps): Pro
     );
   }
 
+  // The limit counts requests, so a JSON-RPC batch would let one request carry a hundred calls.
+  // Batching was dropped from MCP in 2025-06-18; refuse it rather than count inside it.
+  let body: string | undefined;
+  if (request.method === "POST") {
+    body = await request.text();
+    if (body.trimStart().startsWith("[")) {
+      return Response.json({ jsonrpc: "2.0", error: { code: -32600, message: "Batched requests aren't supported; send one call per request." }, id: null }, { status: 400 });
+    }
+    request = new Request(request, { body });
+  }
+
   const server = createMcpServer(deps, agent.mandateId);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
