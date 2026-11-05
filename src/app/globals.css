@@ -22,6 +22,16 @@
   --font-hand: var(--font-architects), "Comic Sans MS", cursive;
 
   --ease-hold: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-progress: progress 1.5s ease-in-out infinite;
+  @keyframes progress {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(400%);
+    }
+  }
 }
 
 @layer base {

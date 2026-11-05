@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import QRCode from "qrcode";
+import { appOrigin } from "@/lib/app/origin";
 import { approvalLinkFor, confirmDemoMandate, latestMandate, revokeOwnMandate, simulatePurchase, startDemoShopper, type Scenario } from "@/lib/app/demo";
 import { clearSession, sessionUserId, setSession } from "@/lib/app/session";
 import { requireEnv } from "@/lib/env";
@@ -71,27 +71,20 @@ export async function revoke() {
   revalidatePath("/app");
 }
 
-async function origin(): Promise<string> {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
-
 export type LinkResult = { ok: true; url: string; qr: string; expiresAt: string } | { ok: false; error: string };
 
 export async function approvalLink(paymentId: string): Promise<LinkResult> {
   const userId = await requireUser();
   const link = await approvalLinkFor(paymentDeps(), userId, paymentId);
   if (!link) return { ok: false, error: "This approval has already been decided or has expired." };
-  const url = `${await origin()}/approve/${link.token}`;
+  const url = `${await appOrigin()}/approve/${link.token}`;
   const qr = await QRCode.toString(url, { type: "svg", margin: 0, color: { dark: "#121211", light: "#0000" } });
   return { ok: true, url, qr, expiresAt: link.expiresAt.toISOString() };
 }
 
-export async function createAgentKey(): Promise<{ ok: true; key: string } | { ok: false; error: string }> {
+export async function createAgentKey(): Promise<{ ok: true; key: string; endpoint: string } | { ok: false; error: string }> {
   const userId = await requireUser();
   const mandate = await latestMandate(serverDb(), userId);
   if (!mandate || mandate.status !== "active") return { ok: false, error: "There's no active mandate to attach a key to." };
-  return { ok: true, key: await issueAgentKey(serverDb(), mandate.id, "dashboard") };
+  return { ok: true, key: await issueAgentKey(serverDb(), mandate.id, "dashboard"), endpoint: `${await appOrigin()}/api/mcp` };
 }

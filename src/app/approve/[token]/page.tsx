@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { mandates } from "@/db/schema";
 import { Logo } from "@/components/brand/Logo";
+import { sessionUserId } from "@/lib/app/session";
 import { InvalidApprovalLinkError, viewApproval } from "@/lib/payments/approvals";
 import { shopLabel } from "@/lib/payments/messages";
 import { formatCents } from "@/lib/policy/describe";
@@ -32,7 +33,9 @@ export default async function ApprovePage({ params }: { params: Promise<{ token:
   }
 
   const { payment, expiresAt } = view;
-  const [mandate] = await deps.db.select({ policy: mandates.policy }).from(mandates).where(eq(mandates.id, payment.mandateId));
+  const [mandate] = await deps.db.select({ policy: mandates.policy, userId: mandates.userId }).from(mandates).where(eq(mandates.id, payment.mandateId));
+  // Opened in the same browser as the dashboard (not on a phone): send them back once they've decided.
+  const fromDashboard = Boolean(mandate) && (await sessionUserId()) === mandate!.userId;
   const shop = mandate ? shopLabel(mandate.policy, payment.payeeMerchantId) : "A shop";
   const open = payment.status === "pending_approval";
 
@@ -59,9 +62,16 @@ export default async function ApprovePage({ params }: { params: Promise<{ token:
 
       <div className="mt-8">
         {open ? (
-          <Decision token={token} deadline={expiresAt.toISOString().slice(0, 16).replace("T", " ")} />
+          <Decision token={token} deadline={expiresAt.toISOString().slice(0, 16).replace("T", " ")} fromDashboard={fromDashboard} />
         ) : (
-          <p className="rounded-xl bg-paper-2 p-4">This purchase was already decided (status: {payment.status}).</p>
+          <>
+            <p className="rounded-xl bg-paper-2 p-4">This purchase was already decided (status: {payment.status}).</p>
+            {fromDashboard && (
+              <Link href="/app" className="mt-4 inline-flex h-12 items-center rounded-full bg-ink px-6 text-paper hover:bg-accent">
+                Back to your dashboard
+              </Link>
+            )}
+          </>
         )}
       </div>
     </Shell>

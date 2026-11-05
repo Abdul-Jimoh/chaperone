@@ -27,6 +27,7 @@ export async function startDemoShopper(db: Db): Promise<string> {
     .from(paymentMethods)
     .innerJoin(users, eq(users.id, paymentMethods.userId))
     .where(and(eq(users.email, TEMPLATE_EMAIL), eq(paymentMethods.status, "active")))
+    .orderBy(desc(paymentMethods.createdAt))
     .limit(1);
   if (!template) throw new DemoNotReadyError("The demo wallet isn't set up yet (run scripts/seed.ts).");
 

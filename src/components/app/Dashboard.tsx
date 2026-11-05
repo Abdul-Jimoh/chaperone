@@ -4,6 +4,7 @@ import { shopLabel } from "@/lib/payments/messages";
 import { describePolicy, formatCents } from "@/lib/policy/describe";
 import { AgentKey } from "./AgentKey";
 import { ApprovalLink } from "./ApprovalLink";
+import { LiveRefresh } from "./LiveRefresh";
 import { RevokeButton } from "./RevokeButton";
 import { Simulator } from "./Simulator";
 import { Card, decisionLabel, Meter, StatusPill } from "./ui";
@@ -20,6 +21,7 @@ export function Dashboard({ data }: { data: Data }) {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8 lg:py-14">
+      <LiveRefresh waiting={waiting.length > 0} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="label text-ink-2">Dashboard</p>
@@ -69,6 +71,7 @@ export function Dashboard({ data }: { data: Data }) {
                       <p className="font-medium">
                         {shopLabel(policy, p.payeeMerchantId)} · {formatCents(p.totalCents)}
                         <span className="text-ink-2"> · {decisionLabel(p.decision)}</span>
+                        {p.source === "mcp" && <span className="ml-2 rounded-full border border-line-strong px-2 py-0.5 align-middle text-[0.75rem] text-ink-2">your agent</span>}
                       </p>
                       <p className="truncate text-[0.88rem] text-ink-2">
                         {time(p.createdAt)} · {p.clauseText}
@@ -116,7 +119,7 @@ export function Dashboard({ data }: { data: Data }) {
 
           <Card label="Developers" title="Connect your own agent">
             <p className="mb-4 text-[0.95rem] leading-relaxed text-ink-2">
-              Any MCP agent can pay under this mandate with a key. The key fixes the mandate; the agent can&apos;t pick a looser one.
+              Give any MCP agent (Claude Code, Cursor, your own) a key, and it can pay under these rules and nothing looser. It never sees your PayPal details.
             </p>
             <AgentKey disabled={!active} />
           </Card>
