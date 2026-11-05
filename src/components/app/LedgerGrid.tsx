@@ -90,7 +90,7 @@ export function LedgerGrid({ rows }: { rows: LedgerRow[] }) {
   const pinned = useMemo(() => [{ shop: "Paid in total", totalCents: paid } as LedgerRow], [paid]);
 
   return (
-    <div className="grid gap-4 2xl:grid-cols-[1fr_20rem]">
+    <div className="grid gap-4">
       <div className={`min-w-0 ${rows.length > 12 ? "h-136" : ""}`}>
         <AgGridReact<LedgerRow>
           theme={theme}

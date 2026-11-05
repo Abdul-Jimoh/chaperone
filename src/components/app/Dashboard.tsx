@@ -7,9 +7,16 @@ import { ApprovalLink } from "./ApprovalLink";
 import { LiveRefresh } from "./LiveRefresh";
 import { RevokeButton } from "./RevokeButton";
 import { Simulator } from "./Simulator";
-import { Card, decisionLabel, Meter, StatusPill } from "./ui";
+import { Card, decisionLabel, Meter, SHELL, StatusPill } from "./ui";
 
 type Data = NonNullable<Awaited<ReturnType<typeof dashboard>>>;
+
+const TOOLS = [
+  ["check_mandate", "Reads the rules, the shops and what's left to spend. Can preview a cart without reserving anything."],
+  ["request_payment", "Asks to pay one shop for a cart. Returns paid, waiting for you, or blocked, and the rule that decided."],
+  ["list_spend", "Lists what it has bought and the budget windows."],
+  ["revoke_mandate", "Stops itself for good."],
+] as const;
 
 const time = (d: Date) => d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" }) + " UTC";
 
@@ -20,20 +27,20 @@ export function Dashboard({ data }: { data: Data }) {
   const month = policy.budgets.find((b) => b.period === "month");
 
   return (
-    <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8 lg:py-14">
+    <div className={`${SHELL} py-10 lg:py-14`}>
       <LiveRefresh waiting={waiting.length > 0} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="label text-ink-2">Dashboard</p>
-          <h1 className="display mt-3 text-[clamp(2rem,4.4vw,3.2rem)]">{active ? "Your agent is shopping under these rules." : "This mandate is revoked."}</h1>
+          <h1 className="display mt-3 max-w-5xl text-[clamp(2rem,4.4vw,3.6rem)]">{active ? "Your agent is shopping under these rules." : "This mandate is revoked."}</h1>
         </div>
         <span className={`rounded-full px-3 py-1.5 text-[0.9rem] font-medium ${active ? "bg-mint text-go" : "bg-ink text-paper"}`}>
           {active ? "Mandate active" : "Revoked: every request is denied"}
         </span>
       </div>
 
-      <div className="mt-10 grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+      <div className="mt-10 grid gap-4 lg:grid-cols-12 lg:items-start">
+        <div className="space-y-4 lg:col-span-8">
           <Card label="Try it" title="Let the agent try a purchase">
             <p className="mb-5 leading-relaxed text-ink-2">
               Each button sends a cart through the same checks a real agent gets, with real PayPal sandbox holds.
@@ -85,7 +92,7 @@ export function Dashboard({ data }: { data: Data }) {
           </Card>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 lg:col-span-4">
           <Card label="Budget" title="This month">
             {month && (
               <>
@@ -116,15 +123,36 @@ export function Dashboard({ data }: { data: Data }) {
               </div>
             )}
           </Card>
-
-          <Card label="Developers" title="Connect your own agent">
-            <p className="mb-4 text-[0.95rem] leading-relaxed text-ink-2">
-              Give any MCP agent (Claude Code, Cursor, your own) a key, and it can pay under these rules and nothing looser. It never sees your PayPal details.
-            </p>
-            <AgentKey disabled={!active} />
-          </Card>
         </div>
       </div>
+
+      <Card label="Developers" title="Connect your own agent" className="mt-4">
+        <div className="grid gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-5">
+            <p className="leading-relaxed text-ink-2">
+              The buttons above stand in for an agent. Chaperone is also an MCP server, so a real one can pay the same way: Claude Code, Cursor, or an
+              agent you built. Its key is tied to this mandate, so it can&apos;t pick a looser one, and it never sees your PayPal details.
+            </p>
+            <dl className="mt-6 divide-y divide-line border-y border-line">
+              {TOOLS.map(([name, what]) => (
+                <div key={name} className="py-3">
+                  <dt className="font-mono text-[0.85rem]">{name}</dt>
+                  <dd className="mt-1 text-[0.92rem] leading-relaxed text-ink-2">{what}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="label mt-8 text-ink-2">In your own product</p>
+            <ol className="mt-3 space-y-2 text-[0.95rem] leading-relaxed text-ink-2">
+              <li>1. Your user writes and signs a mandate, and links PayPal once.</li>
+              <li>2. They create a key for that mandate and give it to your agent.</li>
+              <li>3. Your agent finds products however it likes, then calls request_payment. Chaperone checks the cart and places, captures or voids the PayPal hold.</li>
+            </ol>
+          </div>
+          <div className="lg:col-span-7">
+            <AgentKey disabled={!active} />
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }

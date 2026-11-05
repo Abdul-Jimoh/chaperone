@@ -3,13 +3,6 @@
 import { useState, useTransition } from "react";
 import { createAgentKey } from "@/app/app/actions";
 
-const TOOLS = [
-  ["check_mandate", "reads your rules, shops and what's left to spend"],
-  ["request_payment", "asks to pay a shop for a cart"],
-  ["list_spend", "lists what it has bought"],
-  ["revoke_mandate", "stops itself, for good"],
-] as const;
-
 const EXAMPLE = "Check my Chaperone mandate, then buy one 12 kg bag of dry dog food from Pet Pantry.";
 
 function Snippet({ label, text }: { label: string; text: string }) {
@@ -62,21 +55,18 @@ export function AgentKey({ disabled }: { disabled: boolean }) {
         <li>
           <p className="font-medium">3. Watch it here</p>
           <p className="mt-1 text-ink-2">
-            Its requests show up under Activity, marked &ldquo;your agent&rdquo;, and get the same checks as the buttons on the left. Revoking the mandate stops it.
+            Its requests show up under Activity, marked &ldquo;your agent&rdquo;, and get the same checks as the buttons above. Revoking the mandate stops it.
           </p>
         </li>
       </ol>
     );
   }
   return (
-    <div>
-      <ul className="mb-5 space-y-2 text-[0.88rem]">
-        {TOOLS.map(([name, what]) => (
-          <li key={name}>
-            <code className="font-mono text-[0.8rem] text-ink">{name}</code> <span className="text-ink-2">{what}</span>
-          </li>
-        ))}
-      </ul>
+    <div className="rounded-2xl border border-dashed border-line-strong p-6">
+      <p className="font-medium">Try it with your own agent</p>
+      <p className="mt-1 mb-5 text-[0.92rem] leading-relaxed text-ink-2">
+        Create a key and you&apos;ll get a command to paste into Claude Code, a config for other MCP clients, and a prompt to try.
+      </p>
       <button
         type="button"
         disabled={disabled || pending}

@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 
+/** The landing page's container, so the app lines up with it. */
+export const SHELL = "mx-auto w-full max-w-[1680px] px-5 sm:px-8";
+
 const STATUS: Record<string, { label: string; tone: string }> = {
   captured: { label: "Paid", tone: "bg-mint text-go" },
   pending_approval: { label: "Waiting for you", tone: "bg-accent text-paper" },

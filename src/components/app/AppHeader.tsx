@@ -1,21 +1,33 @@
 import Link from "next/link";
 import { endDemo } from "@/app/app/actions";
-import { Logo } from "@/components/brand/Logo";
+import { Logo, LogoMark } from "@/components/brand/Logo";
+import { SHELL } from "./ui";
 
 export function AppHeader({ signedIn }: { signedIn: boolean }) {
   return (
     <header className="border-b border-line">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
+      <div className={`${SHELL} flex h-16 items-center justify-between gap-4`}>
         <Link href="/" aria-label="Chaperone home" className="text-[1.05rem]">
-          <Logo />
+          {signedIn ? (
+            <>
+              <span className="sm:hidden">
+                <LogoMark className="size-7" />
+              </span>
+              <span className="hidden sm:inline">
+                <Logo />
+              </span>
+            </>
+          ) : (
+            <Logo />
+          )}
         </Link>
-        <nav className="flex items-center gap-1 sm:gap-2">
+        <nav className="flex items-center sm:gap-2">
           {signedIn && (
             <>
-              <Link href="/app" className="rounded-full px-3 py-2 text-[0.95rem] text-ink-2 hover:text-ink">
+              <Link href="/app" className="whitespace-nowrap rounded-full px-2 py-2 text-[0.95rem] text-ink-2 hover:text-ink sm:px-3">
                 Dashboard
               </Link>
-              <Link href="/app/ledger" className="rounded-full px-3 py-2 text-[0.95rem] text-ink-2 hover:text-ink">
+              <Link href="/app/ledger" className="whitespace-nowrap rounded-full px-2 py-2 text-[0.95rem] text-ink-2 hover:text-ink sm:px-3">
                 Ledger
               </Link>
             </>
@@ -25,7 +37,7 @@ export function AppHeader({ signedIn }: { signedIn: boolean }) {
           </span>
           {signedIn && (
             <form action={endDemo}>
-              <button type="submit" className="rounded-full px-3 py-2 text-[0.95rem] text-ink-2 hover:text-ink">
+              <button type="submit" className="whitespace-nowrap rounded-full px-2 py-2 text-[0.95rem] text-ink-2 hover:text-ink sm:px-3">
                 End demo
               </button>
             </form>

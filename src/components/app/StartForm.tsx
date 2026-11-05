@@ -7,7 +7,7 @@ import { SubmitButton } from "./SubmitButton";
 export function StartForm() {
   const [state, action] = useActionState<{ error: string } | null, FormData>(startDemo, null);
   return (
-    <form action={action} className="mt-12">
+    <form action={action}>
       <SubmitButton pending="Setting up your demo…" className="h-12 px-7 text-[1.02rem]">
         Start the demo <span aria-hidden>→</span>
       </SubmitButton>

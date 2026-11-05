@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app/AppHeader";
 import { LedgerGrid, type LedgerRow } from "@/components/app/LedgerGrid";
+import { SHELL } from "@/components/app/ui";
 import { ledgerEvents, mandates, payments } from "@/db/schema";
 import { sessionUserId } from "@/lib/app/session";
 import { shopLabel } from "@/lib/payments/messages";
@@ -50,9 +51,9 @@ export default async function LedgerPage() {
   return (
     <>
       <AppHeader signedIn />
-      <main className="mx-auto max-w-350 px-5 py-10 sm:px-8 lg:py-14">
+      <main className={`${SHELL} py-10 lg:py-14`}>
         <p className="label text-ink-2">Ledger</p>
-        <h1 className="display mt-3 text-[clamp(2rem,4.4vw,3.2rem)]">Every payment, the rule behind it, and what PayPal did.</h1>
+        <h1 className="display mt-3 max-w-5xl text-[clamp(2rem,4.4vw,3.6rem)]">Every payment, the rule behind it, and what PayPal did.</h1>
         <p className="mt-4 max-w-2xl text-ink-2">
           Each row was checked against the signed mandate whose hash it stores. Sort or filter any column; select a row for its full trail.
         </p>
