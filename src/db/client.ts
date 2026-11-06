@@ -17,5 +17,7 @@ export function withVerifiedTls(connectionString: string): string {
 
 export function createDb(connectionString: string, options: { max?: number } = {}): { db: Db; pool: Pool } {
   const pool = new Pool({ connectionString: withVerifiedTls(connectionString), max: options.max ?? 5 });
+  // An idle connection Neon drops emits "error" on the pool; unhandled, that would crash the process.
+  pool.on("error", (error) => console.warn("idle database connection closed:", error.message));
   return { db: drizzle(pool, { schema }), pool };
 }

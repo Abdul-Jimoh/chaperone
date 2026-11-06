@@ -12,13 +12,15 @@ import { demoWorld, paymentDeps, serverDb } from "@/lib/server";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Demo" };
 
+async function sweepThrottled() {
+  if ((await hit(serverDb(), [[LIMITS.pageSweep, null]])).ok) await sweepApprovals(paymentDeps());
+}
+
 export default async function AppPage() {
   const userId = await sessionUserId();
   // Timeouts are applied lazily (D12): without this, an unanswered purchase would look like it's still waiting.
   // At most once a minute across all visitors, so a void that keeps failing isn't retried by every render.
-  if (userId && (await hit(serverDb(), [[LIMITS.pageSweep, null]])).ok) {
-    await sweepApprovals(paymentDeps()).catch((error) => console.warn("approval sweep failed:", error));
-  }
+  if (userId) await sweepThrottled().catch((error) => console.warn("approval sweep failed:", error));
   const data = userId ? await dashboard(serverDb(), userId) : null;
   return (
     <>
