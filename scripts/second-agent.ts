@@ -22,7 +22,9 @@ const llm = createLlm({ db, transport: liveTransport(new Anthropic()), budgetUsd
 const mcp = new Client({ name: "second-agent", version: "0.1.0" });
 try {
   await mcp.connect(new StreamableHTTPClientTransport(url, { requestInit: { headers: { Authorization: `Bearer ${key}` } } }));
-  const run = await runMcpAgent({ llm, mcp, search: channel3Search(new Channel3({ apiKey: process.env.CHANNEL3_API_KEY! })) }, { goal });
+  // Channel3 is only used if the server has no search_products of its own (the deployed one does).
+  const search = process.env.CHANNEL3_API_KEY ? channel3Search(new Channel3({ apiKey: process.env.CHANNEL3_API_KEY })) : undefined;
+  const run = await runMcpAgent({ llm, mcp, search }, { goal });
   for (const s of run.steps) console.log(`\n> ${s.tool} ${JSON.stringify(s.input)}\n${s.output.slice(0, 600)}`);
   console.log(`\n${run.summary}\n\n(${run.turns} turns, ${run.stopped}; total metered spend $${((await llm.spentMicroUsd()) / 1e6).toFixed(6)} of $${(llm.capMicroUsd / 1e6).toFixed(2)})`);
 } finally {

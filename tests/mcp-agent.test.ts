@@ -3,6 +3,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { payments } from "@/db/schema";
 import { runMcpAgent } from "@/lib/agent/mcp-agent";
+import { demoCatalog } from "@/lib/catalog";
 import { createLlm } from "@/lib/llm/llm";
 import type { PaymentDeps } from "@/lib/payments/service";
 import { handleMcpRequest } from "@/mcp/http";
@@ -63,5 +64,38 @@ describe("second agent over MCP", () => {
     ]);
     expect(JSON.parse(result.steps[0]!.output)).toMatchObject({ decision: "deny", clause_id: "payee.allowlist" });
     expect(paypal.calls).toEqual([]);
+  });
+
+  it("against a server with a catalog, uses its search and pays by listing id, with no duplicate tool names", async () => {
+    const paypal = fakePayPal({ "shop-a-app": SHOP_A, "shop-b-app": SHOP_B });
+    const deps: PaymentDeps = { db, platform: paypal.platform, payees: paypal.payees };
+    const shops = [
+      { key: "corner-market", name: "Corner Market", merchantId: SHOP_A, sells: "" },
+      { key: "pet-pantry", name: "Pet Pantry", merchantId: SHOP_B, sells: "" },
+    ];
+    const mandate = await seedLinkedMandate(db, samplePolicy({ categories: [], merchants: shops.map((s) => ({ merchantId: s.merchantId, name: s.name })) }));
+    const key = await issueAgentKey(db, mandate.id, "second agent");
+    const mcp = new Client({ name: "second-agent", version: "1.0.0" });
+    await mcp.connect(
+      new StreamableHTTPClientTransport(new URL("https://chaperone.test/api/mcp"), {
+        fetch: async (url, init) => handleMcpRequest(new Request(url, init), deps, { shopping: { catalog: demoCatalog(shops, ROGUE) } }),
+        requestInit: { headers: { Authorization: `Bearer ${key}` } },
+      }),
+    );
+    const { transport, requests } = scriptedTransport(
+      [
+        { tools: [{ name: "search_products", input: { query: "dry dog food" } }] },
+        { tools: [{ name: "request_payment", input: { items: [{ listing_id: "pp-dry-dog-food-5kg", quantity: 1 }] } }] },
+        { text: "Paid $26.49 to Pet Pantry." },
+      ],
+      () => ({}),
+    );
+    const result = await runMcpAgent({ llm: createLlm({ db, transport, budgetUsd: 1.5 }), mcp, search }, { goal: "Buy dog food." });
+    await mcp.close();
+
+    const names = (requests[0]!.params.tools ?? []).map((t) => (t as { name: string }).name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(JSON.parse(result.steps[0]!.output).listings).toContainEqual(expect.objectContaining({ listing_id: "pp-dry-dog-food-5kg" }));
+    expect(JSON.parse(result.steps[1]!.output)).toMatchObject({ decision: "allow", status: "captured", total_cents: 2_649 });
   });
 });
