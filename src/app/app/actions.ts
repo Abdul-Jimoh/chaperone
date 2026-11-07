@@ -11,6 +11,7 @@ import {
   confirmDemoMandate,
   exampleReadBack,
   createDemoAgentKey,
+  disconnectAgent,
   latestMandate,
   NotYoursError,
   revokeOwnMandate,
@@ -151,4 +152,11 @@ export async function createAgentKey(): Promise<{ ok: true; key: string; endpoin
   const key = await refusable(() => createDemoAgentKey(serverDb(), userId));
   if (refused(key)) return { ok: false, error: key.refused };
   return { ok: true, key, endpoint: `${await appOrigin()}/api/mcp` };
+}
+
+export async function disconnect(agentKeyId: string) {
+  const userId = await requireUser();
+  if (!UUID.test(agentKeyId)) return;
+  await refusable(() => disconnectAgent(serverDb(), userId, agentKeyId));
+  revalidatePath("/app");
 }

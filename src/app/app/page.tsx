@@ -5,6 +5,7 @@ import { Onboarding } from "@/components/app/Onboarding";
 import { StartScreen } from "@/components/app/StartScreen";
 import { dashboard, scenarioCards } from "@/lib/app/demo";
 import { DEMO_STATEMENT } from "@/lib/demo";
+import { appOrigin } from "@/lib/app/origin";
 import { sessionUserId } from "@/lib/app/session";
 import { sweepApprovals } from "@/lib/payments/approvals";
 import { hit, LIMITS } from "@/lib/ratelimit";
@@ -27,7 +28,7 @@ export default async function AppPage() {
     <>
       <AppHeader signedIn={Boolean(userId)} />
       <main>
-        {!userId ? <StartScreen /> : data ? <Dashboard data={data} scenarios={scenarioCards(demoWorld(), data.mandate, data.spent)} /> : <Onboarding example={DEMO_STATEMENT} />}
+        {!userId ? <StartScreen /> : data ? <Dashboard data={data} scenarios={scenarioCards(demoWorld(), data.mandate, data.spent)} mcpUrl={`${await appOrigin()}/api/mcp`} /> : <Onboarding example={DEMO_STATEMENT} />}
       </main>
     </>
   );

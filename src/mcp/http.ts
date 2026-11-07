@@ -3,24 +3,24 @@ import type { PaymentDeps } from "@/lib/payments/service";
 import { hit, LIMITS, refusal } from "@/lib/ratelimit";
 import { resolveAgentKey } from "./keys";
 import { createMcpServer } from "./server";
+import type { Shopping } from "./tools";
 
-function unauthorized(message: string): Response {
-  return Response.json(
-    { jsonrpc: "2.0", error: { code: -32001, message }, id: null },
-    { status: 401, headers: { "WWW-Authenticate": 'Bearer realm="chaperone"' } },
-  );
+function unauthorized(message: string, resourceMetadata?: string): Response {
+  // Points MCP clients at the protected-resource metadata, from which they find the sign-in ("Connect Chaperone").
+  const challenge = resourceMetadata ? `Bearer realm="chaperone", resource_metadata="${resourceMetadata}"` : 'Bearer realm="chaperone"';
+  return Response.json({ jsonrpc: "2.0", error: { code: -32001, message }, id: null }, { status: 401, headers: { "WWW-Authenticate": challenge } });
 }
 
 /**
  * Stateless Streamable HTTP: each request gets a fresh server bound to the mandate behind its bearer
  * key, so nothing is kept between serverless invocations.
  */
-export async function handleMcpRequest(request: Request, deps: PaymentDeps): Promise<Response> {
+export async function handleMcpRequest(request: Request, deps: PaymentDeps, options: { resourceMetadata?: string; shopping?: Shopping } = {}): Promise<Response> {
   const header = request.headers.get("authorization") ?? "";
   const key = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!key) return unauthorized("Send an agent key as a Bearer token.");
+  if (!key) return unauthorized("Connect this agent to Chaperone (sign in), or send an agent key as a Bearer token.", options.resourceMetadata);
   const agent = await resolveAgentKey(deps.db, key, deps.clock?.());
-  if (!agent) return unauthorized("Unknown or revoked agent key.");
+  if (!agent) return unauthorized("Unknown or disconnected agent key. Connect again.", options.resourceMetadata);
   const verdict = await hit(deps.db, [[LIMITS.mcpCallsPerKey, agent.keyId]], deps.clock?.());
   if (!verdict.ok) {
     return Response.json(
@@ -40,7 +40,7 @@ export async function handleMcpRequest(request: Request, deps: PaymentDeps): Pro
     request = new Request(request, { body });
   }
 
-  const server = createMcpServer(deps, agent.mandateId);
+  const server = createMcpServer(deps, agent.mandateId, options.shopping);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   try {

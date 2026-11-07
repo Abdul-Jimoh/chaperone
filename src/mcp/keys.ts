@@ -7,9 +7,9 @@ import { sha256Hex } from "@/lib/policy/canonical";
 const PREFIX = "chp_ak_";
 
 /** Shown once. Only the hash is stored, so the database can't leak usable keys. */
-export async function issueAgentKey(db: Db, mandateId: string, label: string): Promise<string> {
+export async function issueAgentKey(db: Db, mandateId: string, label: string, via: "key" | "oauth" = "key"): Promise<string> {
   const key = `${PREFIX}${randomBytes(32).toString("base64url")}`;
-  await db.insert(agentKeys).values({ mandateId, label, keyHash: sha256Hex(key) });
+  await db.insert(agentKeys).values({ mandateId, label, via, keyHash: sha256Hex(key) });
   return key;
 }
 

@@ -1,4 +1,4 @@
-import type { Listing, ProductSearch } from "@/lib/agent/catalog";
+import type { Listing } from "@/lib/agent/catalog";
 import type { DemoShop } from "@/lib/shops";
 
 /** A demo listing. In production the shop's own checkout supplies items and prices; here Chaperone stands in for it. */
@@ -50,7 +50,7 @@ export function demoCatalog(shops: DemoShop[], rogueMerchantId: string): Catalog
 }
 
 /** Keyword search over the demo catalog: deterministic, so the same request always finds the same listings. */
-export function catalogSearch(catalog: CatalogListing[]): ProductSearch {
+export function catalogSearch(catalog: CatalogListing[]): (query: string, limit: number) => Promise<CatalogListing[]> {
   const index = catalog.map((l) => ({ l, words: new Set(words(`${l.title} ${l.sourceCategory} ${ENTRIES.find((e) => e.id === l.productId)?.words ?? ""}`)) }));
   return async (query, limit) => {
     const wanted = [...new Set(words(query))];

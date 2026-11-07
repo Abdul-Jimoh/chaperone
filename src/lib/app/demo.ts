@@ -1,9 +1,9 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { JWK } from "jose";
 import type { Db } from "@/db/client";
-import { approvals, mandates, paymentMethods, payments, users } from "@/db/schema";
+import { agentKeys, approvals, mandates, paymentMethods, payments, users } from "@/db/schema";
 import { DEMO_GOAL, DEMO_STATEMENT, DEMO_TIMEZONE, demoPolicy } from "@/lib/demo";
 import type { AgentStep } from "@/lib/agent/run";
 import { runShoppingAgent } from "@/lib/agent/run";
@@ -132,7 +132,12 @@ export async function dashboard(db: Db, userId: string, now = new Date()) {
   const deadlines = waiting.length
     ? await db.select({ paymentId: approvals.paymentId, expiresAt: approvals.expiresAt }).from(approvals).where(inArray(approvals.paymentId, waiting.map((p) => p.id)))
     : [];
-  return { mandate, spent, recent, waiting, deadlines: new Map(deadlines.map((d) => [d.paymentId, d.expiresAt])) };
+  const agents = await db
+    .select({ id: agentKeys.id, label: agentKeys.label, via: agentKeys.via, lastUsedAt: agentKeys.lastUsedAt, createdAt: agentKeys.createdAt })
+    .from(agentKeys)
+    .where(and(eq(agentKeys.mandateId, mandate.id), isNull(agentKeys.revokedAt)))
+    .orderBy(desc(agentKeys.createdAt));
+  return { mandate, spent, recent, waiting, agents, deadlines: new Map(deadlines.map((d) => [d.paymentId, d.expiresAt])) };
 }
 
 export type Scenario = "allowed" | "ask" | "injected";
@@ -224,6 +229,17 @@ export async function createDemoAgentKey(db: Db, userId: string): Promise<string
   if (!mandate) throw new NotYoursError("There's no active mandate to attach a key to.");
   await enforce(db, [[LIMITS.agentKeysPerShopper, userId]]);
   return issueAgentKey(db, mandate.id, "dashboard");
+}
+
+/** Disconnects one agent: its key stops working at once. Only the mandate's owner can do it. */
+export async function disconnectAgent(db: Db, userId: string, agentKeyId: string, now = new Date()) {
+  const [row] = await db
+    .select({ id: agentKeys.id })
+    .from(agentKeys)
+    .innerJoin(mandates, eq(mandates.id, agentKeys.mandateId))
+    .where(and(eq(agentKeys.id, agentKeyId), eq(mandates.userId, userId)));
+  if (!row) throw new NotYoursError("That agent isn't connected to your rules.");
+  await db.update(agentKeys).set({ revokedAt: now }).where(eq(agentKeys.id, agentKeyId));
 }
 
 export async function revokeOwnMandate(deps: PaymentDeps, userId: string) {

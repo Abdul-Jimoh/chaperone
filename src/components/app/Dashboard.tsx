@@ -3,7 +3,7 @@ import type { dashboard } from "@/lib/app/demo";
 import { shopLabel } from "@/lib/payments/messages";
 import { describePolicy, formatCents } from "@/lib/policy/describe";
 import { DEMO_GOAL } from "@/lib/demo";
-import { AgentKey } from "./AgentKey";
+import { ConnectAgent } from "./AgentKey";
 import { AgentRun } from "./AgentRun";
 import { ApprovalLink } from "./ApprovalLink";
 import { LiveRefresh } from "./LiveRefresh";
@@ -15,6 +15,7 @@ type Data = NonNullable<Awaited<ReturnType<typeof dashboard>>>;
 
 const TOOLS = [
   ["check_mandate", "Reads the rules, the shops and what's left to spend. Can preview a cart without reserving anything."],
+  ["search_products", "Searches the shops' catalog. Prices and sellers come from Chaperone, not from the agent."],
   ["request_payment", "Asks to pay one shop for a cart. Returns paid, waiting for you, or blocked, and the rule that decided."],
   ["list_spend", "Lists what it has bought and the budget windows."],
   ["revoke_mandate", "Stops itself for good."],
@@ -22,7 +23,7 @@ const TOOLS = [
 
 const time = (d: Date) => d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" }) + " UTC";
 
-export function Dashboard({ data, scenarios }: { data: Data; scenarios: ScenarioCard[] }) {
+export function Dashboard({ data, scenarios, mcpUrl }: { data: Data; scenarios: ScenarioCard[]; mcpUrl: string }) {
   const { mandate, spent, recent, waiting, deadlines } = data;
   const { policy } = mandate;
   const active = mandate.status === "active";
@@ -153,12 +154,16 @@ export function Dashboard({ data, scenarios }: { data: Data; scenarios: Scenario
             <p className="label mt-8 text-ink-2">In your own product</p>
             <ol className="mt-3 space-y-2 text-[0.95rem] leading-relaxed text-ink-2">
               <li>1. Your user writes and signs a mandate, and links PayPal once.</li>
-              <li>2. They create a key for that mandate and give it to your agent.</li>
-              <li>3. Your agent finds products however it likes, then calls request_payment. Chaperone checks the cart and places, captures or voids the PayPal hold.</li>
+              <li>2. Your agent asks to connect; they sign in to Chaperone and press Allow. No card or key changes hands.</li>
+              <li>3. Your agent shops and calls request_payment. Chaperone checks the cart and places, captures or voids the PayPal hold.</li>
             </ol>
           </div>
           <div className="lg:col-span-7">
-            <AgentKey disabled={!active} />
+            <ConnectAgent
+              endpoint={mcpUrl}
+              disabled={!active}
+              agents={data.agents.map((a) => ({ id: a.id, label: a.label, via: a.via, lastUsedAt: a.lastUsedAt?.toISOString() ?? null }))}
+            />
           </div>
         </div>
       </Card>
