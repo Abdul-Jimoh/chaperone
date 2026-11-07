@@ -7,22 +7,27 @@ import { redirect } from "next/navigation";
 import QRCode from "qrcode";
 import {
   approvalLinkFor,
+  compileDemoRules,
   confirmDemoMandate,
+  exampleReadBack,
   createDemoAgentKey,
   latestMandate,
   NotYoursError,
   revokeOwnMandate,
   simulatePurchase,
   startDemoShopper,
+  type CompileOutcome,
+  type ReadBack,
   type Scenario,
 } from "@/lib/app/demo";
 import { appOrigin } from "@/lib/app/origin";
 import { clearSession, sessionUserId, setSession } from "@/lib/app/session";
-import { requireEnv } from "@/lib/env";
+import { ConfigError, requireEnv } from "@/lib/env";
+import { LlmBudgetExceededError } from "@/lib/llm/llm";
 import { shopLabel } from "@/lib/payments/messages";
 import { formatCents } from "@/lib/policy/describe";
 import { clientId, RateLimitedError } from "@/lib/ratelimit";
-import { demoWorld, paymentDeps, serverDb } from "@/lib/server";
+import { demoWorld, paymentDeps, serverDb, serverLlm } from "@/lib/server";
 
 /** Limits and ownership checks become a message on the page instead of an error screen. */
 async function refusable<T>(run: () => Promise<T>): Promise<T | { refused: string }> {
@@ -57,9 +62,37 @@ export async function endDemo() {
   redirect("/");
 }
 
-export async function confirmMandate(): Promise<{ error: string } | null> {
+export type CompileResponse = CompileOutcome | { ok: false; error: string; example: boolean };
+
+/** Claude's first job, live. When Claude can't be used, the visitor is offered the example's recorded compile instead. */
+export async function compileRules(statement: string): Promise<CompileResponse> {
   const userId = await requireUser();
-  const result = await refusable(() => confirmDemoMandate(serverDb(), demoWorld(), userId, JSON.parse(requireEnv("MANDATE_SIGNING_JWK"))));
+  const deps = { db: serverDb(), llm: serverLlm(userId), world: demoWorld(), secret: requireEnv("APPROVAL_LINK_SECRET") };
+  try {
+    const result = await refusable(() => compileDemoRules(deps, userId, String(statement ?? "")));
+    if (refused(result)) return { ok: false, error: result.refused, example: true };
+    return result;
+  } catch (error) {
+    console.warn("compile failed:", error);
+    const why =
+      error instanceof LlmBudgetExceededError
+        ? "The demo has used its Claude budget, so custom rules are paused."
+        : error instanceof ConfigError
+          ? "Claude isn't set up on this server."
+          : "Claude couldn't draft that just now. Try again in a moment.";
+    return { ok: false, error: why, example: true };
+  }
+}
+
+export async function exampleRules(): Promise<ReadBack> {
+  const userId = await requireUser();
+  return exampleReadBack(demoWorld(), userId, requireEnv("APPROVAL_LINK_SECRET"));
+}
+
+export async function confirmMandate(_prev: { error: string } | null, form: FormData): Promise<{ error: string } | null> {
+  const userId = await requireUser();
+  const secrets = { draft: requireEnv("APPROVAL_LINK_SECRET"), signingJwk: JSON.parse(requireEnv("MANDATE_SIGNING_JWK")) };
+  const result = await refusable(() => confirmDemoMandate(serverDb(), userId, String(form.get("draft") ?? ""), secrets));
   if (refused(result)) return { error: result.refused };
   revalidatePath("/app");
   return null;

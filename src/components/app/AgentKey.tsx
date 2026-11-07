@@ -55,7 +55,7 @@ export function AgentKey({ disabled }: { disabled: boolean }) {
         <li>
           <p className="font-medium">3. Watch it here</p>
           <p className="mt-1 text-ink-2">
-            Its requests show up under Activity, marked &ldquo;your agent&rdquo;, and get the same checks as the buttons above. Revoking the mandate stops it.
+            Its requests show up under Activity, marked &ldquo;your agent&rdquo;, and get the same checks as the agent above. Revoking the mandate stops it.
           </p>
         </li>
       </ol>

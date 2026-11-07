@@ -5,7 +5,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ledgerEvents, mandates, paymentMethods, payments, users } from "@/db/schema";
 import {
   approvalLinkFor,
-  confirmDemoMandate,
   dashboard,
   DemoNotReadyError,
   NotYoursError,
@@ -18,6 +17,7 @@ import type { ApprovalDeps } from "@/lib/payments/approvals";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, testDb } from "./support/db";
 import { ROGUE, SHOP_A, SHOP_B } from "./support/fixtures";
+import { confirmExample } from "./support/demo";
 
 const { db, pool } = testDb();
 afterAll(() => pool.end());
@@ -51,7 +51,7 @@ function setup() {
 
 async function shopper() {
   const id = await startDemoShopper(db, "test-client");
-  await confirmDemoMandate(db, world, id, jwk);
+  await confirmExample(db, world, id, jwk);
   return id;
 }
 
@@ -76,7 +76,7 @@ describe("judge-mode demo", () => {
   it("confirming twice keeps a single active mandate", async () => {
     await seedTemplateWallet();
     const id = await shopper();
-    await confirmDemoMandate(db, world, id, jwk);
+    await confirmExample(db, world, id, jwk);
     expect(await db.select().from(mandates).where(eq(mandates.userId, id))).toHaveLength(1);
   });
 

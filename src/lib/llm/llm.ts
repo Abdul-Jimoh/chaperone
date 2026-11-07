@@ -3,9 +3,9 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 import type { Db } from "@/db/client";
-import { llmUsage } from "@/db/schema";
+import { llmCache, llmUsage } from "@/db/schema";
 import { costMicroUsd, DEFAULT_MODEL, isKnownModel, worstCaseMicroUsd, type Model } from "./pricing";
-import type { MessageParams, Transport } from "./transport";
+import { fixtureKey, type MessageParams, type Transport } from "./transport";
 
 /** Claude's three jobs in Chaperone. None of them decides a payment. */
 export type LlmPurpose = "compile_mandate" | "shopping_agent" | "classify";
@@ -17,6 +17,8 @@ export type LlmOptions = {
   sessionId?: string | null;
   /** Opus is only for a run the human has approved; everything else runs on Haiku. */
   allowExpensiveModel?: boolean;
+  /** Reuse the stored response to an identical request instead of paying for it again (see llmCache). */
+  cache?: boolean;
 };
 
 export type LlmRequest = Omit<MessageParams, "model"> & { model?: Model };
@@ -81,6 +83,12 @@ export function createLlm(options: LlmOptions) {
       output_config: { effort: "low", ...request.output_config },
     };
 
+    const cacheKey = options.cache ? `${purpose}:${fixtureKey(params)}` : null;
+    if (cacheKey) {
+      const [hit] = await options.db.select({ response: llmCache.response }).from(llmCache).where(eq(llmCache.key, cacheKey));
+      if (hit) return hit.response as Anthropic.Message;
+    }
+
     const promptChars = JSON.stringify([params.system, params.messages, params.tools, params.output_config]).length;
     const id = await reserve(purpose, model, worstCaseMicroUsd(model, promptChars, params.max_tokens));
 
@@ -108,6 +116,9 @@ export function createLlm(options: LlmOptions) {
 
     if (response.stop_reason === "refusal") {
       throw new LlmRefusalError(`Claude declined the request (${response.stop_details?.category ?? "no category"})`);
+    }
+    if (cacheKey && response.stop_reason !== "max_tokens") {
+      await options.db.insert(llmCache).values({ key: cacheKey, purpose, response }).onConflictDoNothing();
     }
     return response;
   }

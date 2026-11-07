@@ -1,4 +1,5 @@
 import "server-only";
+import Anthropic from "@anthropic-ai/sdk";
 import { createDb, type Db } from "@/db/client";
 import { ConfigError, env, requireEnv } from "@/lib/env";
 import type { DemoWorld } from "@/lib/app/demo";
@@ -7,10 +8,14 @@ import { createPayPalClient } from "@/lib/paypal/client";
 import { createPayeeClients, payeeCredentialsFromEnv } from "@/lib/paypal/payees";
 import { httpsCertLoader } from "@/lib/paypal/webhooks";
 import { demoShops } from "@/lib/shops";
+import { catalogSearch, demoCatalog } from "@/lib/catalog";
+import { createLlm, type Llm } from "@/lib/llm/llm";
+import { liveTransport, type Transport } from "@/lib/llm/transport";
 
 // Module scope survives between invocations of a warm serverless function, so pools and tokens are reused.
 let db: Db | undefined;
 let deps: ApprovalDeps | undefined;
+let anthropic: Anthropic | undefined;
 
 export function serverDb(): Db {
   db ??= createDb(requireEnv("DATABASE_URL"), { max: 3 }).db;
@@ -28,6 +33,24 @@ export function paymentDeps(): ApprovalDeps {
 }
 
 export const paypalCertLoader = httpsCertLoader();
+
+// Created on the first cache miss, so cached replies still work on a deployment without an API key.
+const claude: Transport = (params, purpose) => {
+  const apiKey = env().ANTHROPIC_API_KEY;
+  if (!apiKey) throw new ConfigError("Missing env var ANTHROPIC_API_KEY.");
+  anthropic ??= new Anthropic({ apiKey });
+  return liveTransport(anthropic)(params, purpose);
+};
+
+/** Claude for the app's three jobs: metered against LLM_BUDGET_USD, with identical requests replayed from the cache. */
+export function serverLlm(sessionId?: string): Llm {
+  return createLlm({ db: serverDb(), transport: claude, budgetUsd: env().LLM_BUDGET_USD, cache: true, sessionId });
+}
+
+export function demoSearch() {
+  const world = demoWorld();
+  return catalogSearch(demoCatalog(world.shops, world.rogueMerchantId));
+}
 
 /** The demo's shops and the merchant used as the "wrong shop" in the injected-listing cart. */
 export function demoWorld(): DemoWorld {

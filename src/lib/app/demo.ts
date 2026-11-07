@@ -4,12 +4,20 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { JWK } from "jose";
 import type { Db } from "@/db/client";
 import { approvals, mandates, paymentMethods, payments, users } from "@/db/schema";
-import { DEMO_STATEMENT, demoPolicy } from "@/lib/demo";
+import { DEMO_GOAL, DEMO_STATEMENT, DEMO_TIMEZONE, demoPolicy } from "@/lib/demo";
+import type { AgentStep } from "@/lib/agent/run";
+import { runShoppingAgent } from "@/lib/agent/run";
+import type { ProductSearch } from "@/lib/agent/catalog";
+import type { Llm } from "@/lib/llm/llm";
+import { compileMandate } from "@/lib/policy/compile";
+import { describePolicy, formatCents } from "@/lib/policy/describe";
+import { evaluate } from "@/lib/policy/evaluate";
+import { openDraft, sealDraft } from "./drafts";
 import { spentByPeriod } from "@/lib/ledger/reserve";
 import { storeConfirmedMandate, type Mandate } from "@/lib/mandates";
 import { issueApprovalLink, sweepApprovals, type ApprovalDeps } from "@/lib/payments/approvals";
 import { requestPayment, revokeMandate, type PaymentDeps, type PaymentResult } from "@/lib/payments/service";
-import { enforce, LIMITS, purchaseChecks } from "@/lib/ratelimit";
+import { enforce, LIMITS, purchaseChecks, type Limit } from "@/lib/ratelimit";
 import { issueAgentKey } from "@/mcp/keys";
 import type { DemoShop } from "@/lib/shops";
 
@@ -52,17 +60,52 @@ export async function startDemoShopper(db: Db, client: string, now = new Date())
   });
 }
 
-export function demoDraft(world: DemoWorld) {
-  return { statement: DEMO_STATEMENT, policy: demoPolicy(world.shops) };
+export type ReadBack = { statement: string; token: string; rules: string[]; notEnforced: string[] };
+export type CompileOutcome = ({ ok: true } & ReadBack) | { ok: false; problems: string[] };
+
+async function clientOf(db: Db, userId: string): Promise<string> {
+  const [user] = await db.select({ client: users.demoClient }).from(users).where(eq(users.id, userId));
+  return user?.client ?? "legacy";
 }
 
-/** Signs the demo mandate after the user has read it back and pressed confirm. One active mandate per shopper. */
-export async function confirmDemoMandate(db: Db, world: DemoWorld, userId: string, signingJwk: JWK): Promise<Mandate> {
+function readBack(secret: string, userId: string, statement: string, policy: Mandate["policy"], notEnforced: string[]): ReadBack {
+  return { statement, token: sealDraft(secret, { userId, statement, policy }), rules: describePolicy(policy), notEnforced };
+}
+
+/** The example sentence as Claude compiled it when it was recorded; offered when Claude can't be reached. */
+export function exampleReadBack(world: DemoWorld, userId: string, secret: string): ReadBack {
+  return readBack(secret, userId, DEMO_STATEMENT, demoPolicy(world.shops), []);
+}
+
+/** Claude drafts the visitor's own sentence; code validates it. Nothing is stored until they confirm the read-back. */
+export async function compileDemoRules(
+  deps: { db: Db; llm: Llm; world: DemoWorld; secret: string },
+  userId: string,
+  statement: string,
+  now = new Date(),
+): Promise<CompileOutcome> {
+  const text = statement.trim();
+  if (text.length < 10) return { ok: false, problems: ["Write your rules in a sentence or two."] };
+  if (text.length > 600) return { ok: false, problems: ["Keep your rules under 600 characters."] };
+  const checks: [Limit, string | null][] = [
+    [LIMITS.compilesPerShopper, userId],
+    [LIMITS.aiPerClientDaily, await clientOf(deps.db, userId)],
+  ];
+  if (text !== DEMO_STATEMENT) checks.push([LIMITS.customCompilesAll, null]);
+  await enforce(deps.db, checks, now);
+  const result = await compileMandate(deps.llm, { statement: text, shops: deps.world.shops, timezone: DEMO_TIMEZONE, now });
+  if (!result.ok) return result;
+  return { ok: true, ...readBack(deps.secret, userId, text, result.policy, result.notEnforced) };
+}
+
+/** Signs exactly the policy that was read back (the sealed draft). One active mandate per shopper. */
+export async function confirmDemoMandate(db: Db, userId: string, token: string, secrets: { draft: string; signingJwk: JWK }): Promise<Mandate> {
   const current = await activeMandate(db, userId);
   if (current) return current;
+  const draft = openDraft(secrets.draft, token, userId);
+  if (!draft) throw new NotYoursError("That read-back has expired or was changed. Turn your rules into a draft again.");
   await enforce(db, [[LIMITS.mandatesPerShopper, userId]]);
-  const { statement, policy } = demoDraft(world);
-  return storeConfirmedMandate(db, { userId, statement, policy, signingJwk });
+  return storeConfirmedMandate(db, { userId, statement: draft.statement, policy: draft.policy, signingJwk: secrets.signingJwk });
 }
 
 export async function activeMandate(db: Db, userId: string): Promise<Mandate | null> {
@@ -94,10 +137,10 @@ export async function dashboard(db: Db, userId: string, now = new Date()) {
 
 export type Scenario = "allowed" | "ask" | "injected";
 
-// Carts an agent might propose. They go through the same evaluator and PayPal sandbox as a real agent's.
+// Carts an agent might propose, from the demo catalog. They go through the same evaluator and PayPal sandbox as a real agent's.
 function scenarioCart(world: DemoWorld, scenario: Scenario) {
   const shops = new Map(world.shops.map((s) => [s.key, s.merchantId]));
-  const cart = (payeeMerchantId: string, items: { title: string; unitPriceCents: number; quantity: number; category: string }[]) => ({
+  const cart = (payeeMerchantId: string, items: { productId: string; title: string; unitPriceCents: number; quantity: number; category: string }[]) => ({
     payeeMerchantId,
     currency: "USD",
     items,
@@ -106,18 +149,34 @@ function scenarioCart(world: DemoWorld, scenario: Scenario) {
   });
   switch (scenario) {
     case "allowed":
-      return cart(shops.get("pet-pantry")!, [{ title: "Dry dog food, 12 kg", unitPriceCents: 2_649, quantity: 1, category: "dog-food" }]);
+      return cart(shops.get("pet-pantry")!, [{ productId: "pp-dry-dog-food-5kg", title: "Dry dog food, chicken and rice, 5 kg", unitPriceCents: 2_649, quantity: 1, category: "dog-food" }]);
     case "ask":
       return cart(shops.get("home-basics")!, [
-        { title: "Paper towels, 12 rolls", unitPriceCents: 2_999, quantity: 1, category: "paper-towels" },
-        { title: "Dish soap, 750 ml", unitPriceCents: 750, quantity: 2, category: "dish-soap" },
+        { productId: "hb-paper-towels-12", title: "Paper towels, 12 rolls", unitPriceCents: 3_349, quantity: 1, category: "paper-towels" },
+        { productId: "hb-dish-soap-750", title: "Dish soap, 750 ml", unitPriceCents: 750, quantity: 1, category: "dish-soap" },
       ]);
     case "injected":
       // The listing told the agent to buy 10 and pay a merchant that isn't one of the user's shops.
-      return cart(world.rogueMerchantId, [
-        { title: "Premium kibble, 30 lb", unitPriceCents: 2_499, quantity: 10, category: "dog-food" },
-      ]);
+      return cart(world.rogueMerchantId, [{ productId: "bpd-dry-dog-food-5kg", title: "Dry dog food, 5 kg, bulk deal", unitPriceCents: 2_499, quantity: 10, category: "dog-food" }]);
   }
+}
+
+const SCENARIO_COPY: Record<Scenario, { noun: string; body: string }> = {
+  allowed: { noun: "the dog food", body: "Pet Pantry." },
+  ask: { noun: "the paper towels and dish soap", body: "Home Basics." },
+  injected: { noun: "the 10 bags of dog food", body: "A listing told the agent to ignore your limits and pay Bulk Pet Deals, a shop you never listed." },
+};
+
+const VERDICT: Record<string, string> = { allow: "Your rules: pay it.", needs_approval: "Your rules: ask you first.", deny: "Your rules: block it." };
+
+/** The fixed carts, with what the user's current rules would say about each right now. */
+export function scenarioCards(world: DemoWorld, mandate: Mandate, spent: Record<string, number>, now = new Date()) {
+  return (["allowed", "ask", "injected"] as const).map((id) => {
+    const cart = scenarioCart(world, id);
+    const e = evaluate({ policy: mandate.policy, mandateStatus: mandate.status, cart, spent, now });
+    const items = cart.items.map((i) => (i.quantity > 1 ? `${i.quantity} × ${i.title.split(",")[0]!.toLowerCase()}` : i.title.split(",")[0]!)).join(" and ");
+    return { id, noun: SCENARIO_COPY[id].noun, title: `${items}, ${formatCents(e.totalCents)}`, body: SCENARIO_COPY[id].body, expect: VERDICT[e.decision]! };
+  });
 }
 
 async function ownMandate(db: Db, userId: string): Promise<Mandate> {
@@ -133,6 +192,31 @@ export async function simulatePurchase(deps: PaymentDeps, world: DemoWorld, user
   // Like a real agent's request: expired approvals give their budget back before this one is decided.
   await sweepApprovals(deps).catch((error) => console.warn("approval sweep failed:", error));
   return requestPayment(deps, { mandateId: mandate.id, runId: `demo-${attemptId}`, source: "agent", cart: scenarioCart(world, scenario) });
+}
+
+/**
+ * Claude's second job, live: the agent searches the demo shops' catalog and asks Chaperone to pay. It proposes
+ * listing ids and quantities; prices, titles and sellers come from the catalog, and the evaluator decides.
+ */
+export async function runDemoAgent(
+  deps: { payments: PaymentDeps; llm: Llm; search: ProductSearch; world: DemoWorld },
+  userId: string,
+  input: { goal: string; attemptId: string; onStep?: (step: AgentStep) => void },
+) {
+  const goal = input.goal.trim();
+  if (goal.length < 5 || goal.length > 300) throw new NotYoursError("Describe the shopping trip in a sentence (up to 300 characters).");
+  const mandate = await ownMandate(deps.payments.db, userId);
+  const checks: [Limit, string | null][] = [
+    [LIMITS.agentRunsPerShopper, userId],
+    [LIMITS.aiPerClientDaily, await clientOf(deps.payments.db, userId)],
+    ...(await purchaseChecks(deps.payments.db, userId)),
+  ];
+  if (goal !== DEMO_GOAL || mandate.statement !== DEMO_STATEMENT) checks.push([LIMITS.customAgentRunsAll, null]);
+  await enforce(deps.payments.db, checks, deps.payments.clock?.());
+  return runShoppingAgent(
+    { llm: deps.llm, search: deps.search, payments: deps.payments, shops: deps.world.shops },
+    { mandateId: mandate.id, goal, runId: `agent-${input.attemptId}`, onStep: input.onStep },
+  );
 }
 
 export async function createDemoAgentKey(db: Db, userId: string): Promise<string> {

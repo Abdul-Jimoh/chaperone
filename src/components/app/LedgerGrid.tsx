@@ -102,7 +102,7 @@ export function LedgerGrid({ rows }: { rows: LedgerRow[] }) {
           defaultColDef={{ sortable: true, resizable: true, filter: true }}
           rowSelection={{ mode: "singleRow", checkboxes: false, enableClickSelection: true }}
           onRowClicked={(e) => !e.node.rowPinned && e.data && setSelected(e.data)}
-          overlayNoRowsTemplate="No payments yet. Let the agent try a purchase from the dashboard."
+          overlayNoRowsTemplate="No payments yet. Send the agent shopping from the dashboard."
         />
       </div>
       <aside className="rounded-[1.4rem] border border-line-strong p-5" aria-live="polite">

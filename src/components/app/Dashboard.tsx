@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import type { dashboard } from "@/lib/app/demo";
 import { shopLabel } from "@/lib/payments/messages";
 import { describePolicy, formatCents } from "@/lib/policy/describe";
+import { DEMO_GOAL } from "@/lib/demo";
 import { AgentKey } from "./AgentKey";
+import { AgentRun } from "./AgentRun";
 import { ApprovalLink } from "./ApprovalLink";
 import { LiveRefresh } from "./LiveRefresh";
 import { RevokeButton } from "./RevokeButton";
-import { Simulator } from "./Simulator";
+import { Simulator, type ScenarioCard } from "./Simulator";
 import { Card, decisionLabel, Meter, SHELL, StatusPill } from "./ui";
 
 type Data = NonNullable<Awaited<ReturnType<typeof dashboard>>>;
@@ -20,7 +22,7 @@ const TOOLS = [
 
 const time = (d: Date) => d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" }) + " UTC";
 
-export function Dashboard({ data }: { data: Data }) {
+export function Dashboard({ data, scenarios }: { data: Data; scenarios: ScenarioCard[] }) {
   const { mandate, spent, recent, waiting, deadlines } = data;
   const { policy } = mandate;
   const active = mandate.status === "active";
@@ -41,11 +43,18 @@ export function Dashboard({ data }: { data: Data }) {
 
       <div className="mt-10 grid gap-4 lg:grid-cols-12 lg:items-start">
         <div className="space-y-4 lg:col-span-8">
-          <Card label="Try it" title="Let the agent try a purchase">
+          <Card label="Shopping day" title="Send the agent shopping">
             <p className="mb-5 leading-relaxed text-ink-2">
-              Each button sends a cart through the same checks a real agent gets, with real PayPal sandbox holds.
+              Tell Claude what you need. Every payment it tries goes through your rules first, as a real PayPal sandbox hold.
             </p>
-            <Simulator disabled={!active} attempt={randomUUID()} />
+            <AgentRun example={DEMO_GOAL} attempt={randomUUID()} />
+          </Card>
+
+          <Card label="Test the rules" title="Or send one cart yourself">
+            <p className="mb-5 leading-relaxed text-ink-2">
+              Each button sends a fixed cart, as if the agent had proposed it. The last one is what an agent tricked by a listing would send.
+            </p>
+            <Simulator disabled={!active} attempt={randomUUID()} scenarios={scenarios} />
           </Card>
 
           {waiting.length > 0 && (
@@ -69,7 +78,7 @@ export function Dashboard({ data }: { data: Data }) {
 
           <Card label="Activity" title="Every request, and the rule that decided it">
             {recent.length === 0 ? (
-              <p className="text-ink-2">Nothing yet. Let the agent try a purchase above.</p>
+              <p className="text-ink-2">Nothing yet. Send the agent shopping above.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {recent.map((p) => (
@@ -130,7 +139,7 @@ export function Dashboard({ data }: { data: Data }) {
         <div className="grid gap-10 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <p className="leading-relaxed text-ink-2">
-              The buttons above stand in for an agent. Chaperone is also an MCP server, so a real one can pay the same way: Claude Code, Cursor, or an
+              The agent above runs inside Chaperone. Chaperone is also an MCP server, so your own agent can shop and pay the same way: Claude Code, Cursor, or an
               agent you built. Its key is tied to this mandate, so it can&apos;t pick a looser one, and it never sees your PayPal details.
             </p>
             <dl className="mt-6 divide-y divide-line border-y border-line">

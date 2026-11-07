@@ -9,8 +9,11 @@ export type Listing = {
   title: string;
   description: string;
   priceCents: number;
-  /** Channel3's own category slug, e.g. "non-prescription-dog-food". */
+  /** The source's own category slug, e.g. Channel3's "non-prescription-dog-food". */
   sourceCategory: string | null;
+  /** Set when the catalog knows who sells it (the demo shops); Channel3 results leave the payee to the agent. */
+  merchantId?: string;
+  shop?: string;
 };
 
 export type ProductSearch = (query: string, limit: number) => Promise<Listing[]>;

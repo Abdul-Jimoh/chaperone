@@ -29,6 +29,14 @@ export const LIMITS = {
   // Not shown to anyone: a full bucket just means the page skips the sweep this minute.
   pageSweep: { name: "sweep:page", max: 1, windowMs: 60_000, message: "" },
   mcpCallsPerKey: { name: "mcp:key", max: 150, windowMs: HOUR, message: "This agent key has made a lot of calls this hour." },
+  compilesPerShopper: { name: "compiles:shopper", max: 15, windowMs: HOUR, message: "You've rewritten your rules a lot in the last hour." },
+  agentRunsPerShopper: { name: "agent-runs:shopper", max: 8, windowMs: HOUR, message: "The agent has been shopping a lot for you this hour." },
+  aiPerClientDaily: { name: "ai:client-day", max: 40, windowMs: DAY, message: "You've used Claude a lot from here today." },
+  // The example sentence and goal replay from the cache for free; only edited ones call Claude and count here.
+  customCompilesAll: { name: "compiles:custom", max: 150, windowMs: DAY, message: "The demo has turned a lot of custom rules into policies today. The example sentence still works." },
+  customAgentRunsAll: { name: "agent-runs:custom", max: 60, windowMs: DAY, message: "The agent has run a lot of custom shopping trips today. The example trip still works." },
+  oauthConnectsPerShopper: { name: "oauth:shopper", max: 10, windowMs: DAY, message: "You've connected a lot of agents today." },
+  oauthRegistrationsAll: { name: "oauth:register", max: 2_000, windowMs: DAY, message: "Too many agent registrations today." },
 } satisfies Record<string, Limit>;
 
 export class RateLimitedError extends Error {

@@ -72,6 +72,8 @@ export const agentKeys = pgTable("agent_keys", {
   id: uuid("id").primaryKey().defaultRandom(),
   mandateId: uuid("mandate_id").notNull().references(() => mandates.id),
   label: text("label").notNull(),
+  /** "key" when created on the dashboard and pasted; "oauth" when the user approved the agent's sign-in. */
+  via: text("via").notNull().default("key"),
   keyHash: text("key_hash").notNull().unique(),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
@@ -206,3 +208,27 @@ export const rateLimits = pgTable(
   },
   (t) => [primaryKey({ columns: [t.bucket, t.windowStart] }), index("rate_limits_window_idx").on(t.windowStart)],
 );
+
+/**
+ * Claude responses keyed by the exact request. A repeated request (the demo sentence, the demo shopping run)
+ * replays for free and the same way every time, so the public demo is cheap and repeatable.
+ */
+export const llmCache = pgTable("llm_cache", {
+  key: text("key").primaryKey(),
+  purpose: text("purpose").notNull(),
+  response: jsonb("response").notNull(),
+  createdAt: createdAt(),
+});
+
+/** One-time OAuth authorization codes for "Connect Chaperone". Only the hash is stored. */
+export const oauthCodes = pgTable("oauth_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  clientId: text("client_id").notNull(),
+  clientName: text("client_name").notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  mandateId: uuid("mandate_id").notNull().references(() => mandates.id),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});

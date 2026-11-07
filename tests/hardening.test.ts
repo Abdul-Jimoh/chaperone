@@ -3,7 +3,7 @@ import { exportJWK, generateKeyPair, type JWK } from "jose";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mandates, paymentMethods, payments, rateLimits, users } from "@/db/schema";
-import { approvalLinkFor, confirmDemoMandate, createDemoAgentKey, revokeOwnMandate, simulatePurchase, startDemoShopper, type DemoWorld } from "@/lib/app/demo";
+import { approvalLinkFor, createDemoAgentKey, revokeOwnMandate, simulatePurchase, startDemoShopper, type DemoWorld } from "@/lib/app/demo";
 import type { ApprovalDeps } from "@/lib/payments/approvals";
 import { httpsCertLoader } from "@/lib/paypal/webhooks";
 import { clientId, LIMITS, RateLimitedError, type Limit } from "@/lib/ratelimit";
@@ -13,6 +13,7 @@ import { requestPaymentTool } from "@/mcp/tools";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, testDb } from "./support/db";
 import { ROGUE, SHOP_A, SHOP_B } from "./support/fixtures";
+import { confirmExample } from "./support/demo";
 
 const { db, pool } = testDb();
 afterAll(() => pool.end());
@@ -67,11 +68,11 @@ describe("demo limits", () => {
     await seedTemplateWallet();
     const d = deps();
     const old = await startDemoShopper(db, "visitor-a");
-    await confirmDemoMandate(db, world, old, jwk);
+    await confirmExample(db, world, old, jwk);
     const fresh = await startDemoShopper(db, "visitor-a");
-    await confirmDemoMandate(db, world, fresh, jwk);
+    await confirmExample(db, world, fresh, jwk);
     const other = await startDemoShopper(db, "visitor-b");
-    await confirmDemoMandate(db, world, other, jwk);
+    await confirmExample(db, world, other, jwk);
     await exhaust(LIMITS.purchasesPerClientDaily, "visitor-a");
     await expect(simulatePurchase(d, world, old, "allowed", randomUUID())).rejects.toBeInstanceOf(RateLimitedError);
     await expect(simulatePurchase(d, world, fresh, "allowed", randomUUID())).rejects.toBeInstanceOf(RateLimitedError);
@@ -82,7 +83,7 @@ describe("demo limits", () => {
     await seedTemplateWallet();
     const d = deps();
     const id = await startDemoShopper(db, "visitor-a");
-    const mandate = await confirmDemoMandate(db, world, id, jwk);
+    const mandate = await confirmExample(db, world, id, jwk);
     await exhaust(LIMITS.purchasesPerClientDaily, "visitor-a");
     const viaAgent = await requestPaymentTool(d, mandate.id, {
       payee_merchant_id: SHOP_B,
@@ -98,7 +99,7 @@ describe("demo limits", () => {
     const ids = [];
     for (const client of ["x", "y"]) {
       const id = await startDemoShopper(db, client);
-      await confirmDemoMandate(db, world, id, jwk);
+      await confirmExample(db, world, id, jwk);
       await db.update(users).set({ demoClient: null }).where(eq(users.id, id));
       ids.push(id);
     }
@@ -112,7 +113,7 @@ describe("demo limits", () => {
     for (let i = 0; i < LIMITS.demoStartPerClient.max; i++) await startDemoShopper(db, "busy");
     await expect(startDemoShopper(db, "busy")).rejects.toBeInstanceOf(RateLimitedError);
     const id = await startDemoShopper(db, "calm");
-    await confirmDemoMandate(db, world, id, jwk);
+    await confirmExample(db, world, id, jwk);
     const r = await simulatePurchase(d, world, id, "ask", randomUUID());
     if (!r.ok) throw new Error("invalid cart");
     await exhaust(LIMITS.approvalLinksPerShopper, id);
@@ -123,7 +124,7 @@ describe("demo limits", () => {
     await seedTemplateWallet();
     const d = deps();
     const id = await startDemoShopper(db, "visitor");
-    const mandate = await confirmDemoMandate(db, world, id, jwk);
+    const mandate = await confirmExample(db, world, id, jwk);
     await exhaust(LIMITS.purchasesPerShopperDaily, id);
     await expect(simulatePurchase(d, world, id, "allowed", randomUUID())).rejects.toBeInstanceOf(RateLimitedError);
     const viaAgent = await requestPaymentTool(d, mandate.id, {
@@ -140,17 +141,17 @@ describe("demo limits", () => {
     const d = deps();
     const id = await startDemoShopper(db, "visitor");
     for (let i = 0; i < LIMITS.mandatesPerShopper.max; i++) {
-      await confirmDemoMandate(db, world, id, jwk);
+      await confirmExample(db, world, id, jwk);
       await revokeOwnMandate(d, id);
     }
-    await expect(confirmDemoMandate(db, world, id, jwk)).rejects.toBeInstanceOf(RateLimitedError);
+    await expect(confirmExample(db, world, id, jwk)).rejects.toBeInstanceOf(RateLimitedError);
     expect(await db.select().from(mandates)).toHaveLength(LIMITS.mandatesPerShopper.max);
   });
 
   it("caps agent keys per shopper", async () => {
     await seedTemplateWallet();
     const id = await startDemoShopper(db, "visitor");
-    await confirmDemoMandate(db, world, id, jwk);
+    await confirmExample(db, world, id, jwk);
     for (let i = 0; i < LIMITS.agentKeysPerShopper.max; i++) await createDemoAgentKey(db, id);
     await expect(createDemoAgentKey(db, id)).rejects.toBeInstanceOf(RateLimitedError);
   });
@@ -162,7 +163,7 @@ describe("simulated purchases", () => {
     let now = new Date();
     const d = { ...deps(), clock: () => now };
     const id = await startDemoShopper(db, "visitor", now);
-    await confirmDemoMandate(db, world, id, jwk);
+    await confirmExample(db, world, id, jwk);
     const waiting = await simulatePurchase(d, world, id, "ask", randomUUID());
     if (!waiting.ok) throw new Error("invalid cart");
     expect(waiting.payment.status).toBe("pending_approval");
@@ -197,7 +198,7 @@ describe("MCP batches", () => {
   it("refuses a JSON-RPC batch, so one request can't carry many calls", async () => {
     await seedTemplateWallet();
     const id = await startDemoShopper(db, "visitor");
-    const mandate = await confirmDemoMandate(db, world, id, jwk);
+    const mandate = await confirmExample(db, world, id, jwk);
     const key = await issueAgentKey(db, mandate.id, "test");
     const call = (n: number) => ({ jsonrpc: "2.0", id: n, method: "tools/call", params: { name: "list_spend", arguments: {} } });
     const res = await handleMcpRequest(

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { mandates } from "@/db/schema";
 import type { Llm } from "@/lib/llm/llm";
 import { sweepApprovals } from "@/lib/payments/approvals";
-import { outcomeMessage } from "@/lib/payments/messages";
+import { outcomeMessage, shopLabel } from "@/lib/payments/messages";
 import { requestPayment, type PaymentDeps } from "@/lib/payments/service";
 import { describePolicy, formatCents } from "@/lib/policy/describe";
 import type { Policy } from "@/lib/policy/schema";
@@ -14,7 +14,7 @@ import { classifyListings } from "./classify";
 
 export type AgentStep =
   | { kind: "search"; query: string; found: number }
-  | { kind: "payment"; paymentId: string | null; decision: string; status: string; message: string }
+  | { kind: "payment"; paymentId: string | null; decision: string; status: string; message: string; total: string; shop: string; rule: string }
   | { kind: "error"; tool: string; message: string };
 
 export type AgentRun = { runId: string; steps: AgentStep[]; summary: string; turns: number; stopped: "done" | "turn_limit" | "max_tokens" };
@@ -90,7 +90,7 @@ How to work:
  */
 export async function runShoppingAgent(
   deps: { llm: Llm; search: ProductSearch; payments: PaymentDeps; shops: DemoShop[] },
-  input: { mandateId: string; goal: string; runId: string; maxTurns?: number },
+  input: { mandateId: string; goal: string; runId: string; maxTurns?: number; onStep?: (step: AgentStep) => void },
 ): Promise<AgentRun> {
   const [mandate] = await deps.payments.db.select().from(mandates).where(eq(mandates.id, input.mandateId));
   if (!mandate) throw new Error("mandate not found");
@@ -98,6 +98,10 @@ export async function runShoppingAgent(
 
   const listings = new Map<string, Listing & { category: string | null }>();
   const steps: AgentStep[] = [];
+  const record = (step: AgentStep) => {
+    steps.push(step);
+    input.onStep?.(step);
+  };
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: input.goal }];
   const maxTurns = input.maxTurns ?? 8;
 
@@ -107,13 +111,14 @@ export async function runShoppingAgent(
     const fresh = found.map((l, i) => ({ ...l, id: `L${listings.size + i + 1}` }));
     const categories = await classifyListings(deps.llm, fresh.map((l) => ({ id: l.id, title: l.title, sourceCategory: l.sourceCategory })), policy.categories);
     for (const l of fresh) listings.set(l.id, { ...l, category: categories.get(l.id) ?? null });
-    steps.push({ kind: "search", query, found: fresh.length });
+    record({ kind: "search", query, found: fresh.length });
     return fresh.map((l) => ({
       listing_id: l.id,
       title: l.title,
       price: formatCents(l.priceCents),
       category: policy.categories.length ? (listings.get(l.id)!.category ?? "unclassified") : "any",
       description: l.description,
+      ...(l.merchantId ? { shop: l.shop, merchant_id: l.merchantId } : {}),
     }));
   }
 
@@ -121,6 +126,14 @@ export async function runShoppingAgent(
     const { payee_merchant_id, items } = payInput.parse(raw);
     const unknown = items.filter((i) => !listings.has(i.listing_id)).map((i) => i.listing_id);
     if (unknown.length) throw new Error(`Unknown listing ids: ${unknown.join(", ")}. Use ids returned by search_products.`);
+    // A listing's seller is the catalog's fact, not the agent's: an item can only be paid for to the shop selling it.
+    const elsewhere = items.filter((i) => {
+      const seller = listings.get(i.listing_id)!.merchantId;
+      return seller !== undefined && seller !== payee_merchant_id;
+    });
+    if (elsewhere.length) {
+      throw new Error(`${elsewhere.map((i) => i.listing_id).join(", ")} ${elsewhere.length > 1 ? "are" : "is"} sold by a different shop; pay each shop for its own listings.`);
+    }
     const cart = {
       payeeMerchantId: payee_merchant_id,
       currency: "USD",
@@ -134,8 +147,10 @@ export async function runShoppingAgent(
     const result = await requestPayment(deps.payments, { mandateId: input.mandateId, runId: input.runId, source: "agent", cart });
     if (!result.ok) throw new Error(`Cart rejected: ${result.issues.join("; ")}`);
     const message = outcomeMessage(policy, result.payment);
-    steps.push({ kind: "payment", paymentId: result.payment.id, decision: result.decision, status: result.payment.status, message });
-    return { decision: result.decision, status: result.payment.status, total: formatCents(result.payment.totalCents), message };
+    const total = formatCents(result.payment.totalCents);
+    const shop = shopLabel(policy, result.payment.payeeMerchantId);
+    record({ kind: "payment", paymentId: result.payment.id, decision: result.decision, status: result.payment.status, message, total, shop, rule: result.payment.clauseText });
+    return { decision: result.decision, status: result.payment.status, total, message };
   }
 
   const tools: Record<string, (raw: unknown) => Promise<unknown>> = { search_products: search, request_payment: pay };
@@ -164,7 +179,7 @@ export async function runShoppingAgent(
         results.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(await tool(block.input)) });
       } catch (error) {
         const message = error instanceof z.ZodError ? `Invalid input: ${error.message}` : error instanceof Error ? error.message : String(error);
-        steps.push({ kind: "error", tool: block.name, message });
+        record({ kind: "error", tool: block.name, message });
         results.push({ type: "tool_result", tool_use_id: block.id, content: message, is_error: true });
       }
     }

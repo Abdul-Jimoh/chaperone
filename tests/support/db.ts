@@ -10,7 +10,7 @@ export function testDb(max = 20) {
 
 export async function resetDb(db: Db) {
   await db.execute(sql`
-    truncate table agent_keys, ledger_events, approvals, reservations, payments, mandates, payment_methods,
+    truncate table oauth_codes, llm_cache, agent_keys, ledger_events, approvals, reservations, payments, mandates, payment_methods,
       merchants, webhook_events, llm_usage, rate_limits, users restart identity cascade
   `);
 }
