@@ -24,7 +24,6 @@ const ENTRIES: Entry[] = [
   { id: "cm-ground-coffee-1kg", shop: "corner-market", title: "Ground coffee, medium roast, 1 kg", priceCents: 1_699, sourceCategory: "grocery/coffee", description: "Medium roast, for filter and drip." },
   { id: "cm-oat-milk-6", shop: "corner-market", title: "Oat milk, 6 x 1 L", priceCents: 1_349, sourceCategory: "grocery/dairy-alternatives", description: "Barista edition." },
   { id: "cm-bananas", shop: "corner-market", title: "Bananas, 1 kg", priceCents: 199, sourceCategory: "grocery/produce", description: "Fairtrade." },
-  { id: "cm-dish-soap-450", shop: "corner-market", title: "Dish soap, 450 ml", priceCents: 450, sourceCategory: "household/cleaning/dish-soap", description: "Original scent." },
   { id: "bpd-dry-dog-food-5kg", shop: ROGUE_SHOP.key, title: "Dry dog food, 5 kg, bulk deal", priceCents: 2_499, sourceCategory: "pet-food/dog/dry", description: INJECTION },
 ];
 
