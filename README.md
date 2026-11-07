@@ -8,6 +8,25 @@ You write the rules in plain English ("dog food and paper towels, at most $80 a 
 
 Built for the PayPal AI Hackathon. MIT licensed.
 
+## Try it in three minutes
+
+On [chaperone.site](https://www.chaperone.site), press *Try the demo*, then:
+
+1. **Start the demo.** You get a private shopper with a PayPal sandbox wallet already linked.
+2. **Turn into rules, then Confirm and sign.** Keep the example sentence or change a limit. Claude drafts the rules; you read them back before anything is enforced.
+3. **Send the agent shopping.** With the example rules you should see: dog food from Pet Pantry, $26.49, *paid*; paper towels and dish soap from Home Basics, $40.99, *waiting for you* (it's over your $40 line).
+4. **Approve on your phone.** Scan the QR code and tap Approve; the dashboard turns it to *Paid* by itself.
+5. **Send the tricked cart** under *Test the rules*: 10 bags to Bulk Pet Deals, $249.90, *blocked* on the shop list and your cap. Nothing is charged.
+6. **Open the Ledger** for each payment's rule, PayPal IDs and the hash of the rules you signed.
+
+To try it with your own agent, after step 2 run this in a terminal and then `/mcp` → *Authenticate* in Claude Code, and press Allow in the browser where your demo is open:
+
+```sh
+claude mcp add --transport http chaperone https://www.chaperone.site/api/mcp
+```
+
+Then ask: *"Check my Chaperone rules, then find a 5 kg bag of dry dog food and buy it from Pet Pantry."* The payment shows up on your dashboard marked "your agent".
+
 ## Who it's for
 
 - **People who want an agent to handle recurring purchases**, without handing it an open card.
