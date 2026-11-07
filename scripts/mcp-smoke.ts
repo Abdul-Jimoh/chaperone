@@ -1,5 +1,5 @@
 // Talks to a running Chaperone MCP endpoint as a separate client would.
-// pnpm tsx scripts/mcp-smoke.ts [url] [pay]   (default url http://localhost:3000/api/mcp; "pay" buys $4.50 of dish soap from Shop A)
+// pnpm tsx scripts/mcp-smoke.ts [url] [pay]   (default url http://localhost:3000/api/mcp; "pay" buys a $7.50 dish soap from Home Basics by listing id)
 import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -19,10 +19,8 @@ const show = async (name: string, args: Record<string, unknown> = {}) => {
 console.log("tools:", (await client.listTools()).tools.map((t) => t.name).join(", "));
 await show("check_mandate");
 if (process.argv[3] === "pay") {
-  await show("request_payment", {
-    payee_merchant_id: process.env.PAYPAL_SHOP_A_MERCHANT_ID,
-    items: [{ product_id: "smoke-dish-soap", title: "Dish soap, 24 oz", unit_price_cents: 450, quantity: 1, category: "dish-soap" }],
-  });
+  await show("search_products", { query: "dish soap" });
+  await show("request_payment", { items: [{ listing_id: "hb-dish-soap-750", quantity: 1 }] });
   await show("list_spend", { limit: 5 });
 }
 await client.close();

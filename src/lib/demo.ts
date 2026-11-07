@@ -7,6 +7,11 @@ export const DEMO_STATEMENT =
 
 export const DEMO_TIMEZONE = "America/New_York";
 
+/** What Claude said it couldn't turn into a rule when it compiled DEMO_STATEMENT (tests/fixtures/llm). */
+export const DEMO_NOT_ENFORCED = [
+  "household basics like paper towels and dish soap (listed as examples; treated as the categories above, but other household basics were not specified)",
+];
+
 export const DEMO_GOAL = "It's restock day. Buy a bag of dry dog food, a pack of paper towels and a bottle of dish soap.";
 
 /** DEMO_STATEMENT exactly as Claude compiled it (recorded in tests/fixtures/llm) and the user would confirm it. */

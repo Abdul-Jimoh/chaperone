@@ -23,7 +23,7 @@ function explain(error: unknown): string {
 export async function POST(request: Request): Promise<Response> {
   // A cookie-authenticated POST: refuse other sites' pages, as Next does for server actions.
   const origin = request.headers.get("origin");
-  if (origin && new URL(origin).host !== request.headers.get("host")) return new Response("Forbidden", { status: 403 });
+  if (origin && URL.parse(origin)?.host !== request.headers.get("host")) return new Response("Forbidden", { status: 403 });
   const userId = await sessionUserId();
   if (!userId) return Response.json({ error: "Start the demo first." }, { status: 401 });
   const body = (await request.json().catch(() => null)) as { goal?: unknown; attempt?: unknown } | null;

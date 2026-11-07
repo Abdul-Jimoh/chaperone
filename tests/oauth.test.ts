@@ -65,18 +65,18 @@ describe("authorization requests", () => {
     expect(checkAuthorize(SECRET, RESOURCE, authorizeParams(register(), challenge, { redirect_uri: "http://localhost:1/other" }))).toHaveProperty("show");
   });
 
-  it("sends later errors back to the client, and requires PKCE S256 and this server's resource", () => {
-    const clientId = register();
+  it("requires PKCE S256, response_type=code and this server's resource, and never redirects on error", () => {
+    const clientId = register(["https://evil.example/"]);
     const { challenge } = pkce();
-    const err = (overrides: Record<string, string | undefined>) => {
-      const result = checkAuthorize(SECRET, RESOURCE, authorizeParams(clientId, challenge, overrides));
-      return "redirect" in result ? new URL(result.redirect).searchParams.get("error") : null;
-    };
-    expect(err({ response_type: "token" })).toBe("unsupported_response_type");
-    expect(err({ code_challenge_method: "plain" })).toBe("invalid_request");
-    expect(err({ code_challenge: undefined })).toBe("invalid_request");
-    expect(err({ resource: "https://other.example/mcp" })).toBe("invalid_target");
-    expect(checkAuthorize(SECRET, RESOURCE, authorizeParams(clientId, challenge)).ok).toBe(true);
+    const check = (overrides: Record<string, string | undefined>) =>
+      checkAuthorize(SECRET, RESOURCE, { ...authorizeParams(clientId, challenge, overrides), redirect_uri: "https://evil.example/" });
+    for (const overrides of [{ response_type: "token" }, { code_challenge_method: "plain" }, { code_challenge: undefined }, { resource: "https://other.example/mcp" }]) {
+      const result = check(overrides);
+      expect(result.ok).toBe(false);
+      expect(result).toHaveProperty("show");
+      expect(result).not.toHaveProperty("redirect");
+    }
+    expect(check({}).ok).toBe(true);
   });
 });
 

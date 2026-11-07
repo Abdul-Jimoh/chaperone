@@ -10,7 +10,7 @@ const handle = withConfigCheck(async (request) => {
   const world = demoWorld();
   return handleMcpRequest(request, paymentDeps(), {
     resourceMetadata: (await endpoints()).resourceMetadata,
-    shopping: { catalog: demoCatalog(world.shops, world.rogueMerchantId), llm: serverLlm() },
+    shopping: { catalog: demoCatalog(world.shops, world.rogueMerchantId), llm: serverLlm },
   });
 });
 

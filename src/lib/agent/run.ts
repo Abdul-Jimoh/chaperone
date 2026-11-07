@@ -90,7 +90,15 @@ How to work:
  */
 export async function runShoppingAgent(
   deps: { llm: Llm; search: ProductSearch; payments: PaymentDeps; shops: DemoShop[] },
-  input: { mandateId: string; goal: string; runId: string; maxTurns?: number; onStep?: (step: AgentStep) => void },
+  input: {
+    mandateId: string;
+    goal: string;
+    runId: string;
+    maxTurns?: number;
+    onStep?: (step: AgentStep) => void;
+    /** Throws to refuse a payment before it is decided (e.g. a rate limit); the agent is told why. */
+    beforePayment?: () => Promise<void>;
+  },
 ): Promise<AgentRun> {
   const [mandate] = await deps.payments.db.select().from(mandates).where(eq(mandates.id, input.mandateId));
   if (!mandate) throw new Error("mandate not found");
@@ -142,6 +150,7 @@ export async function runShoppingAgent(
         return { productId: l.productId, title: l.title, unitPriceCents: l.priceCents, quantity: i.quantity, category: l.category };
       }),
     };
+    await input.beforePayment?.();
     // Timeouts are applied lazily, so expired approvals give their budget back before this one is decided.
     await sweepApprovals(deps.payments).catch((error) => console.warn("approval sweep failed:", error));
     const result = await requestPayment(deps.payments, { mandateId: input.mandateId, runId: input.runId, source: "agent", cart });

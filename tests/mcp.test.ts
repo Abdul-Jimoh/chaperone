@@ -20,7 +20,8 @@ const now = new Date("2026-11-03T15:00:00Z");
 async function setup() {
   const paypal = fakePayPal({ "shop-a-app": SHOP_A, "shop-b-app": SHOP_B });
   const deps: PaymentDeps = { db, platform: paypal.platform, payees: paypal.payees, clock: () => now };
-  const mandate = await seedLinkedMandate(db, samplePolicy());
+  // No category limit: items an agent prices itself carry no trusted category (D8), so they'd all need approval otherwise.
+  const mandate = await seedLinkedMandate(db, samplePolicy({ categories: [] }));
   const key = await issueAgentKey(db, mandate.id, "test agent");
   const handler: typeof fetch = async (input, init) => handleMcpRequest(new Request(input, init), deps);
   return { paypal, deps, mandate, key, handler };
@@ -136,7 +137,7 @@ describe("MCP server", () => {
   it("a malformed cart is reported back, not charged", async () => {
     const { handler, key } = await setup();
     const client = await connect(handler, key);
-    const { data } = await call(client, "request_payment", { payee_merchant_id: SHOP_A, items: [{ ...coffee, category: "Dog Food!" }] });
+    const { data } = await call(client, "request_payment", { payee_merchant_id: SHOP_A, items: [{ ...coffee, quantity: 0 }] });
     expect(data.error).toBe("invalid_cart");
     expect(await db.select().from(payments)).toEqual([]);
   });

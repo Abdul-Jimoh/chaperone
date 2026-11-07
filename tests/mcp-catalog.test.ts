@@ -7,7 +7,7 @@ import { createLlm } from "@/lib/llm/llm";
 import type { PaymentDeps } from "@/lib/payments/service";
 import { handleMcpRequest } from "@/mcp/http";
 import { issueAgentKey } from "@/mcp/keys";
-import { requestPaymentTool, searchProducts, type Shopping } from "@/mcp/tools";
+import { checkMandate, requestPaymentTool, searchProducts, type Shopping } from "@/mcp/tools";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, seedLinkedMandate, testDb } from "./support/db";
 import { ROGUE, SHOP_A, SHOP_B, samplePolicy } from "./support/fixtures";
@@ -30,13 +30,15 @@ const policy = samplePolicy({
   maxQuantityPerItem: null,
 });
 
-function setup(withClaude = true) {
+function setup(withClaude = true, classifyCalls = { n: 0 }) {
   const paypal = fakePayPal({ "shop-a-app": SHOP_A, "shop-b-app": SHOP_B, "shop-c-app": SHOP_C });
   const deps: PaymentDeps = { db, platform: paypal.platform, payees: paypal.payees };
-  const { transport } = scriptedTransport([], (titles) =>
-    Object.fromEntries(Object.entries(titles).map(([id, t]) => [id, /dog food/i.test(t) ? "dog-food" : /paper towels/i.test(t) ? "paper-towels" : "other"])),
-  );
-  const shopping: Shopping = { catalog, ...(withClaude ? { llm: createLlm({ db, transport, budgetUsd: 1.5 }) } : {}) };
+  const { transport } = scriptedTransport([], (titles) => {
+    classifyCalls.n++;
+    return Object.fromEntries(Object.entries(titles).map(([id, t]) => [id, /dog food/i.test(t) ? "dog-food" : /paper towels/i.test(t) ? "paper-towels" : "other"]));
+  });
+  const llm = createLlm({ db, transport, budgetUsd: 1.5, cache: true });
+  const shopping: Shopping = { catalog, ...(withClaude ? { llm: () => llm } : {}) };
   return { paypal, deps, shopping };
 }
 
@@ -89,5 +91,46 @@ describe("request_payment with catalog listings", () => {
     const mandate = await seedLinkedMandate(db, policy);
     expect(await requestPaymentTool(deps, mandate.id, { items: [{ listing_id: "bpd-dry-dog-food-5kg", quantity: 10 }] }, shopping)).toMatchObject({ decision: "deny" });
     expect(await requestPaymentTool(deps, mandate.id, { items: [{ listing_id: "pp-dog-treats", quantity: 1 }] }, shopping)).toMatchObject({ decision: "needs_approval" });
+  });
+
+  it("won't take a made-up price or category for a shop that sells through the catalog", async () => {
+    const { deps, shopping } = setup();
+    const mandate = await seedLinkedMandate(db, policy);
+    const madeUp = { payee_merchant_id: SHOP_C, items: [{ product_id: "hb-paper-towels-12", title: "Paper towels, 12 rolls", unit_price_cents: 1, quantity: 1, category: "dog-food" }] };
+    expect(await requestPaymentTool(deps, mandate.id, madeUp, shopping)).toMatchObject({ error: "invalid_cart" });
+    expect(await db.select().from(payments)).toEqual([]);
+  });
+
+  it("ignores the category an agent claims for a shop outside the catalog, so the user is asked", async () => {
+    const { deps, shopping } = setup();
+    const outside = "OUTSIDESHOP01";
+    const mandate = await seedLinkedMandate(db, { ...policy, merchants: [...policy.merchants, { merchantId: outside, name: "Outside Shop" }] });
+    const result = await requestPaymentTool(deps, mandate.id, { payee_merchant_id: outside, items: [{ title: "A television", unit_price_cents: 1_000, quantity: 1, category: "dog-food" }] }, shopping);
+    expect(result).toMatchObject({ decision: "needs_approval" });
+    expect((await db.select().from(payments))[0]!.items[0]!.category).toBeNull();
+  });
+
+  it("classifies each listing once per set of rules, however carts are shuffled", async () => {
+    const calls = { n: 0 };
+    const { deps, shopping } = setup(true, calls);
+    const mandate = await seedLinkedMandate(db, policy);
+    for (const quantity of [1, 2, 3]) {
+      await checkMandate(deps, mandate.id, { items: [{ listing_id: "hb-paper-towels-12", quantity }, { listing_id: "hb-dish-soap-750", quantity }] }, shopping);
+      await checkMandate(deps, mandate.id, { items: [{ listing_id: "hb-dish-soap-750", quantity }, { listing_id: "hb-paper-towels-12", quantity }] }, shopping);
+    }
+    expect(calls.n).toBe(2);
+  });
+
+  it("refuses carts of more than 20 items at the MCP boundary", async () => {
+    const { deps, shopping } = setup();
+    const mandate = await seedLinkedMandate(db, policy);
+    const key = await issueAgentKey(db, mandate.id, "agent");
+    const client = new Client({ name: "agent", version: "1.0.0" });
+    const handler: typeof fetch = async (input, init) => handleMcpRequest(new Request(input, init), deps, { shopping });
+    await client.connect(new StreamableHTTPClientTransport(new URL("https://chaperone.test/api/mcp"), { fetch: handler, requestInit: { headers: { Authorization: `Bearer ${key}` } } }));
+    const result = await client.callTool({ name: "request_payment", arguments: { items: Array.from({ length: 21 }, () => ({ listing_id: "hb-sponges-6", quantity: 1 })) } });
+    expect(result.isError).toBe(true);
+    expect(await db.select().from(payments)).toEqual([]);
+    await client.close();
   });
 });

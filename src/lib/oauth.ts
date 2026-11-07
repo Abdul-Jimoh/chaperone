@@ -62,28 +62,17 @@ export function readClient(secret: string, clientId: string): Client | null {
 export type AuthorizeRequest = { clientId: string; client: Client; redirectUri: string; codeChallenge: string; state: string | null };
 
 /**
- * Checks an authorization request. Errors before the redirect URI is known to be the client's are shown on the page
- * (never redirected), as OAuth requires; later errors go back to the client.
+ * Checks an authorization request. Every problem is shown on Chaperone's page, never sent back by redirect: anyone can
+ * register a client, so redirecting on error without the user's say would make this an open redirector (RFC 9700).
  */
-export function checkAuthorize(
-  secret: string,
-  resource: string,
-  params: Record<string, string | undefined>,
-): { ok: true; request: AuthorizeRequest } | { ok: false; show: string } | { ok: false; redirect: string } {
+export function checkAuthorize(secret: string, resource: string, params: Record<string, string | undefined>): { ok: true; request: AuthorizeRequest } | { ok: false; show: string } {
   const client = params.client_id ? readClient(secret, params.client_id) : null;
   if (!client) return { ok: false, show: "This connection request came from an app Chaperone doesn't recognise. Start again from your agent." };
   const redirectUri = params.redirect_uri ?? "";
   if (!client.redirectUris.includes(redirectUri)) return { ok: false, show: "This connection request has a return address the app didn't register." };
-  const back = (error: string, description: string) => {
-    const url = new URL(redirectUri);
-    url.searchParams.set("error", error);
-    url.searchParams.set("error_description", description);
-    if (params.state) url.searchParams.set("state", params.state);
-    return { ok: false as const, redirect: url.toString() };
-  };
-  if (params.response_type !== "code") return back("unsupported_response_type", "Only response_type=code is supported.");
-  if (!params.code_challenge || params.code_challenge_method !== "S256") return back("invalid_request", "PKCE with S256 is required.");
-  if (params.resource && !sameResource(params.resource, resource)) return back("invalid_target", "This server only issues tokens for its MCP endpoint.");
+  if (params.response_type !== "code") return { ok: false, show: "This app asked for a kind of sign-in Chaperone doesn't offer (only response_type=code)." };
+  if (!params.code_challenge || params.code_challenge_method !== "S256") return { ok: false, show: "This app didn't protect its sign-in with PKCE (S256), so Chaperone won't continue." };
+  if (params.resource && !sameResource(params.resource, resource)) return { ok: false, show: "This app asked for access to a different server." };
   return { ok: true, request: { clientId: params.client_id!, client, redirectUri, codeChallenge: params.code_challenge, state: params.state ?? null } };
 }
 

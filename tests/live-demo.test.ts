@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { eq, like } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { exportJWK, generateKeyPair, type JWK } from "jose";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { llmUsage, mandates, paymentMethods, payments, rateLimits, users } from "@/db/schema";
@@ -9,6 +9,7 @@ import { openDraft, sealDraft } from "@/lib/app/drafts";
 import { catalogSearch, demoCatalog } from "@/lib/catalog";
 import { DEMO_GOAL, DEMO_STATEMENT } from "@/lib/demo";
 import { createLlm } from "@/lib/llm/llm";
+import { aiChecks, enforce, LIMITS, RateLimitedError } from "@/lib/ratelimit";
 import type { Transport } from "@/lib/llm/transport";
 import type { PaymentDeps } from "@/lib/payments/service";
 import { fakePayPal } from "./support/fake-paypal";
@@ -138,13 +139,29 @@ describe("writing your own rules", () => {
     expect(await db.select().from(mandates)).toEqual([]);
   });
 
-  it("counts edited sentences against the shared daily cap, but not the example", async () => {
+  it("counts only calls that reach Claude, and keeps the cached example working when a visitor's allowance is spent", async () => {
     const id = await shopper();
     const transport = vi.fn<Transport>(async () => reply(JSON.stringify({ ...draft, shops: ["corner-market", "pet-pantry", "home-basics"] })));
-    await compileDemoRules(deps(transport), id, DEMO_STATEMENT);
-    expect(await db.select().from(rateLimits).where(like(rateLimits.bucket, "compiles:custom%"))).toEqual([]);
-    await compileDemoRules(deps(transport), id, statement);
-    expect(await db.select().from(rateLimits).where(like(rateLimits.bucket, "compiles:custom%"))).toHaveLength(1);
+    const llm = createLlm({ db, transport, budgetUsd: 1.5, cache: true, beforeLive: async () => enforce(db, await aiChecks(db, id)) });
+    const metered = { db, llm, world, secret: DRAFT_SECRET };
+    await compileDemoRules(metered, id, DEMO_STATEMENT);
+    await compileDemoRules(metered, id, DEMO_STATEMENT);
+    expect(transport).toHaveBeenCalledTimes(1);
+    const [live] = await db.select().from(rateLimits).where(eq(rateLimits.bucket, "ai-live:client-day:test-client"));
+    expect(live!.hits).toBe(1);
+
+    await db.update(rateLimits).set({ hits: LIMITS.aiLivePerClientDaily.max }).where(eq(rateLimits.bucket, "ai-live:client-day:test-client"));
+    await expect(compileDemoRules(metered, id, statement)).rejects.toBeInstanceOf(RateLimitedError);
+    expect((await compileDemoRules(metered, id, DEMO_STATEMENT)).ok).toBe(true);
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("never caches a reply that fails validation", async () => {
+    const id = await shopper();
+    const transport = vi.fn<Transport>(async () => reply("not json"));
+    await expect(compileDemoRules(deps(transport), id, statement)).rejects.toThrow(/valid JSON/);
+    await expect(compileDemoRules(deps(transport), id, statement)).rejects.toThrow(/valid JSON/);
+    expect(transport).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -225,11 +242,15 @@ describe("the agent run on the dashboard", () => {
     expect(paypal.ops().filter((op) => op.startsWith("order:")).length).toBe(2);
   });
 
-  it("counts an edited trip against the shared daily cap, but not the example", async () => {
-    const { id, deps } = await setup([{ text: "Nothing to buy." }, { text: "Nothing to buy." }]);
+  it("counts each payment the agent asks for against the purchase limits", async () => {
+    const { id, deps } = await setup([
+      { tools: [{ name: "search_products", input: { query: "dry dog food" } }] },
+      { tools: [{ name: "request_payment", input: { payee_merchant_id: SHOP_B, items: [{ listing_id: L("pp-dry-dog-food-5kg"), quantity: 1 }] } }] },
+      { tools: [{ name: "request_payment", input: { payee_merchant_id: ROGUE, items: [{ listing_id: L("bpd-dry-dog-food-5kg"), quantity: 1 }] } }] },
+      { text: "Done." },
+    ]);
     await runDemoAgent(deps, id, { goal: DEMO_GOAL, attemptId: "00000000-0000-4000-8000-000000000002" });
-    expect(await db.select().from(rateLimits).where(like(rateLimits.bucket, "agent-runs:custom%"))).toEqual([]);
-    await runDemoAgent(deps, id, { goal: "Just some dog treats.", attemptId: "00000000-0000-4000-8000-000000000003" });
-    expect(await db.select().from(rateLimits).where(eq(rateLimits.bucket, "agent-runs:custom"))).toHaveLength(1);
+    const [shopperBucket] = await db.select().from(rateLimits).where(eq(rateLimits.bucket, `purchases:shopper:${id}`));
+    expect(shopperBucket!.hits).toBe(2);
   });
 });

@@ -11,6 +11,7 @@ import { demoShops } from "@/lib/shops";
 import { catalogSearch, demoCatalog } from "@/lib/catalog";
 import { createLlm, type Llm } from "@/lib/llm/llm";
 import { liveTransport, type Transport } from "@/lib/llm/transport";
+import { aiChecks, enforce } from "@/lib/ratelimit";
 
 // Module scope survives between invocations of a warm serverless function, so pools and tokens are reused.
 let db: Db | undefined;
@@ -42,9 +43,24 @@ const claude: Transport = (params, purpose) => {
   return liveTransport(anthropic)(params, purpose);
 };
 
-/** Claude for the app's three jobs: metered against LLM_BUDGET_USD, with identical requests replayed from the cache. */
-export function serverLlm(sessionId?: string): Llm {
-  return createLlm({ db: serverDb(), transport: claude, budgetUsd: env().LLM_BUDGET_USD, cache: true, sessionId });
+/** Kept back from the public demo for development and recording the video. */
+const RESERVED_USD = 0.3;
+
+/**
+ * Claude for the public app, working for one shopper. Identical requests replay from the cache for free; a call that
+ * reaches Claude counts against the shopper's visitor and the demo's daily caps, and stops RESERVED_USD short of the
+ * project's budget.
+ */
+export function serverLlm(userId: string): Llm {
+  const db = serverDb();
+  return createLlm({
+    db,
+    transport: claude,
+    budgetUsd: Math.max(0, env().LLM_BUDGET_USD - RESERVED_USD),
+    cache: true,
+    sessionId: userId,
+    beforeLive: async () => enforce(db, await aiChecks(db, userId)),
+  });
 }
 
 export function demoSearch() {

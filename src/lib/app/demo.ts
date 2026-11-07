@@ -4,7 +4,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { JWK } from "jose";
 import type { Db } from "@/db/client";
 import { agentKeys, approvals, mandates, paymentMethods, payments, users } from "@/db/schema";
-import { DEMO_GOAL, DEMO_STATEMENT, DEMO_TIMEZONE, demoPolicy } from "@/lib/demo";
+import { DEMO_NOT_ENFORCED, DEMO_STATEMENT, DEMO_TIMEZONE, demoPolicy } from "@/lib/demo";
 import type { AgentStep } from "@/lib/agent/run";
 import { runShoppingAgent } from "@/lib/agent/run";
 import type { ProductSearch } from "@/lib/agent/catalog";
@@ -17,7 +17,7 @@ import { spentByPeriod } from "@/lib/ledger/reserve";
 import { storeConfirmedMandate, type Mandate } from "@/lib/mandates";
 import { issueApprovalLink, sweepApprovals, type ApprovalDeps } from "@/lib/payments/approvals";
 import { requestPayment, revokeMandate, type PaymentDeps, type PaymentResult } from "@/lib/payments/service";
-import { enforce, LIMITS, purchaseChecks, type Limit } from "@/lib/ratelimit";
+import { enforce, LIMITS, purchaseChecks } from "@/lib/ratelimit";
 import { issueAgentKey } from "@/mcp/keys";
 import type { DemoShop } from "@/lib/shops";
 
@@ -63,18 +63,13 @@ export async function startDemoShopper(db: Db, client: string, now = new Date())
 export type ReadBack = { statement: string; token: string; rules: string[]; notEnforced: string[] };
 export type CompileOutcome = ({ ok: true } & ReadBack) | { ok: false; problems: string[] };
 
-async function clientOf(db: Db, userId: string): Promise<string> {
-  const [user] = await db.select({ client: users.demoClient }).from(users).where(eq(users.id, userId));
-  return user?.client ?? "legacy";
-}
-
 function readBack(secret: string, userId: string, statement: string, policy: Mandate["policy"], notEnforced: string[]): ReadBack {
   return { statement, token: sealDraft(secret, { userId, statement, policy }), rules: describePolicy(policy), notEnforced };
 }
 
 /** The example sentence as Claude compiled it when it was recorded; offered when Claude can't be reached. */
 export function exampleReadBack(world: DemoWorld, userId: string, secret: string): ReadBack {
-  return readBack(secret, userId, DEMO_STATEMENT, demoPolicy(world.shops), []);
+  return readBack(secret, userId, DEMO_STATEMENT, demoPolicy(world.shops), DEMO_NOT_ENFORCED);
 }
 
 /** Claude drafts the visitor's own sentence; code validates it. Nothing is stored until they confirm the read-back. */
@@ -87,12 +82,8 @@ export async function compileDemoRules(
   const text = statement.trim();
   if (text.length < 10) return { ok: false, problems: ["Write your rules in a sentence or two."] };
   if (text.length > 600) return { ok: false, problems: ["Keep your rules under 600 characters."] };
-  const checks: [Limit, string | null][] = [
-    [LIMITS.compilesPerShopper, userId],
-    [LIMITS.aiPerClientDaily, await clientOf(deps.db, userId)],
-  ];
-  if (text !== DEMO_STATEMENT) checks.push([LIMITS.customCompilesAll, null]);
-  await enforce(deps.db, checks, now);
+  // Claude calls themselves are limited where they happen (serverLlm's beforeLive), so cached replies stay free.
+  await enforce(deps.db, [[LIMITS.compilesPerShopper, userId]], now);
   const result = await compileMandate(deps.llm, { statement: text, shops: deps.world.shops, timezone: DEMO_TIMEZONE, now });
   if (!result.ok) return result;
   return { ok: true, ...readBack(deps.secret, userId, text, result.policy, result.notEnforced) };
@@ -216,16 +207,17 @@ export async function runDemoAgent(
   const goal = input.goal.trim();
   if (goal.length < 5 || goal.length > 300) throw new NotYoursError("Describe the shopping trip in a sentence (up to 300 characters).");
   const mandate = await ownMandate(deps.payments.db, userId);
-  const checks: [Limit, string | null][] = [
-    [LIMITS.agentRunsPerShopper, userId],
-    [LIMITS.aiPerClientDaily, await clientOf(deps.payments.db, userId)],
-    ...(await purchaseChecks(deps.payments.db, userId)),
-  ];
-  if (goal !== DEMO_GOAL || mandate.statement !== DEMO_STATEMENT) checks.push([LIMITS.customAgentRunsAll, null]);
-  await enforce(deps.payments.db, checks, deps.payments.clock?.());
+  await enforce(deps.payments.db, [[LIMITS.agentRunsPerShopper, userId]], deps.payments.clock?.());
   return runShoppingAgent(
     { llm: deps.llm, search: deps.search, payments: deps.payments, shops: deps.world.shops },
-    { mandateId: mandate.id, goal, runId: `agent-${input.attemptId}`, onStep: input.onStep },
+    {
+      mandateId: mandate.id,
+      goal,
+      runId: `agent-${input.attemptId}`,
+      onStep: input.onStep,
+      // Each payment the agent asks for counts against the purchase limits, like a button press or an MCP call.
+      beforePayment: async () => enforce(deps.payments.db, await purchaseChecks(deps.payments.db, userId), deps.payments.clock?.()),
+    },
   );
 }
 

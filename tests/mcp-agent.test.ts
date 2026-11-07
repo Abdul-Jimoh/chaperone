@@ -23,7 +23,7 @@ const search = async () => [
 async function run(turns: Parameters<typeof scriptedTransport>[0]) {
   const paypal = fakePayPal({ "shop-a-app": SHOP_A, "shop-b-app": SHOP_B });
   const deps: PaymentDeps = { db, platform: paypal.platform, payees: paypal.payees };
-  const mandate = await seedLinkedMandate(db, samplePolicy());
+  const mandate = await seedLinkedMandate(db, samplePolicy({ categories: [] }));
   const key = await issueAgentKey(db, mandate.id, "second agent");
   const mcp = new Client({ name: "second-agent", version: "1.0.0" });
   await mcp.connect(

@@ -62,6 +62,16 @@ describe("demo limits", () => {
   it("one visitor's daily allowance can't reach the global caps", () => {
     expect(LIMITS.purchasesPerClientDaily.max * 30).toBeLessThanOrEqual(LIMITS.purchasesAll.max);
     expect(LIMITS.demoStartPerClientDaily.max * 50).toBeLessThanOrEqual(LIMITS.demoStartAll.max);
+    expect(LIMITS.aiLivePerClientDaily.max * 10).toBeLessThanOrEqual(LIMITS.aiLiveAll.max);
+    expect(LIMITS.oauthRegistrationsPerClient.max * 100).toBeLessThanOrEqual(LIMITS.oauthRegistrationsAll.max);
+  });
+
+  it("the agent route refuses another site's page, including a sandboxed one", async () => {
+    const { POST } = await import("@/app/api/demo/agent/route");
+    for (const origin of ["https://evil.example", "null"]) {
+      const response = await POST(new Request("https://chaperone.test/api/demo/agent", { method: "POST", headers: { origin, host: "chaperone.test" }, body: "{}" }));
+      expect(response.status).toBe(403);
+    }
   });
 
   it("a visitor's purchase allowance covers all their shoppers, old ones included", async () => {

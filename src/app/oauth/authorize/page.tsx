@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app/AppHeader";
 import { Card, SHELL } from "@/components/app/ui";
 import { activeMandate } from "@/lib/app/demo";
@@ -30,7 +29,6 @@ export default async function Authorize({ searchParams }: { searchParams: Promis
   const params = Object.fromEntries(Object.entries(raw).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : [])));
   const check = checkAuthorize(requireEnv("APPROVAL_LINK_SECRET"), (await endpoints()).resource, params);
   const userId = await sessionUserId();
-  if (!check.ok && "redirect" in check) redirect(check.redirect);
   if (!check.ok) {
     return (
       <Shell signedIn={Boolean(userId)}>

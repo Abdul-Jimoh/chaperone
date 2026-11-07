@@ -18,7 +18,7 @@ async function recheck(form: FormData) {
 
 export async function allowConnect(_prev: { error: string } | null, form: FormData): Promise<{ error: string } | null> {
   const check = await recheck(form);
-  if (!check.ok) return "redirect" in check ? redirect(check.redirect) : { error: check.show };
+  if (!check.ok) return { error: check.show };
   const userId = await sessionUserId();
   const mandate = userId ? await activeMandate(serverDb(), userId) : null;
   if (!userId || !mandate) return { error: "Open the Chaperone demo in this browser and sign your rules first." };
@@ -34,7 +34,8 @@ export async function allowConnect(_prev: { error: string } | null, form: FormDa
 
 export async function cancelConnect(form: FormData) {
   const check = await recheck(form);
-  if (!check.ok) return "redirect" in check ? redirect(check.redirect) : undefined;
+  // A cancel is the user's own click, so returning to the (registered) app is expected here.
+  if (!check.ok) return;
   const url = new URL(check.request.redirectUri);
   url.searchParams.set("error", "access_denied");
   url.searchParams.set("error_description", "The user cancelled the connection.");
