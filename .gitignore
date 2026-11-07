@@ -17,3 +17,6 @@ docs/private/
 # Planning notes, progress and discussions stay local; only the README is published.
 *.md
 !README.md
+
+# Demo video sources, footage and renders.
+/video/
