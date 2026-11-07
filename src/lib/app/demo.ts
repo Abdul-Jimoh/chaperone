@@ -179,7 +179,12 @@ export function scenarioCards(world: DemoWorld, mandate: Mandate, spent: Record<
   return (["allowed", "ask", "injected"] as const).map((id) => {
     const cart = scenarioCart(world, id);
     const e = evaluate({ policy: mandate.policy, mandateStatus: mandate.status, cart, spent, now });
-    const items = cart.items.map((i) => (i.quantity > 1 ? `${i.quantity} × ${i.title.split(",")[0]!.toLowerCase()}` : i.title.split(",")[0]!)).join(" and ");
+    const items = cart.items
+      .map((i, n) => {
+        const name = i.title.split(",")[0]!;
+        return i.quantity > 1 ? `${i.quantity} × ${name.toLowerCase()}` : n > 0 ? name.toLowerCase() : name;
+      })
+      .join(" and ");
     return { id, noun: SCENARIO_COPY[id].noun, title: `${items}, ${formatCents(e.totalCents)}`, body: SCENARIO_COPY[id].body, expect: VERDICT[e.decision]! };
   });
 }
