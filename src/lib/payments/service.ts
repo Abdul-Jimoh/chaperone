@@ -191,7 +191,9 @@ async function placeHold(deps: PaymentDeps, payment: Payment): Promise<Payment> 
   // PayPal's own record is the truth about who is paid and how much; it must match what was decided.
   const anomalies: string[] = [];
   const payee = order.purchase_units[0]?.payee?.merchant_id;
-  if (payee !== undefined && payee !== payment.payeeMerchantId) anomalies.push("payee_mismatch");
+  // Every response is requested with return=representation, and live sandbox orders carry the payee (P6.8), so a
+  // missing one is as suspect as a wrong one.
+  if (payee !== payment.payeeMerchantId) anomalies.push(payee === undefined ? "payee_missing" : "payee_mismatch");
   if (toCents(auth.amount) !== payment.totalCents) anomalies.push("amount_mismatch");
 
   const now = nowOf(deps);

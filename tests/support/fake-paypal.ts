@@ -15,6 +15,7 @@ export function fakePayPal(shopApps: Record<string, string>) {
   const fail: Partial<Record<"order" | "capture" | "void", Failure>> = {};
   let counter = 0;
   let payeeOverride: string | undefined;
+  let omitPayee = false;
   let gate: Promise<void> | undefined;
   let onOrder: (() => void) | undefined;
 
@@ -56,7 +57,7 @@ export function fakePayPal(shopApps: Record<string, string>) {
         purchase_units: [
           {
             ...unit,
-            payee: { merchant_id: auth.payee },
+            payee: omitPayee ? undefined : { merchant_id: auth.payee },
             payments: { authorizations: [{ id: auth.id, status: auth.status, amount: auth.amount, expiration_time: "2026-12-01T00:00:00Z" }] },
           },
         ],
@@ -105,6 +106,10 @@ export function fakePayPal(shopApps: Record<string, string>) {
     /** PayPal reports a different payee than requested, as a compromised or buggy path would. */
     reportPayee(merchantId: string) {
       payeeOverride = merchantId;
+    },
+    /** The order comes back without a payee, so it can't be checked. */
+    omitPayee() {
+      omitPayee = true;
     },
     /** Holds the next order request until `release` is called, to stage races. */
     holdOrders() {

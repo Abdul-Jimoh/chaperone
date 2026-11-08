@@ -169,6 +169,15 @@ describe("requestPayment", () => {
     expect(result.payment).toMatchObject({ status: "authorized", anomalyFlags: ["payee_mismatch"] });
     expect(paypal.ops()).toEqual(["order:platform-app"]);
   });
+
+  it("doesn't capture a hold whose payee PayPal didn't report", async () => {
+    const { paypal, deps } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.omitPayee();
+    const result = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
+    expect(result.payment).toMatchObject({ status: "authorized", anomalyFlags: ["payee_missing"] });
+    expect(paypal.ops()).toEqual(["order:platform-app"]);
+  });
 });
 
 describe("approvals", () => {
