@@ -14,18 +14,18 @@ On [chaperone.site](https://www.chaperone.site), press *Try the demo*, then:
 
 1. **Start the demo.** You get a private shopper with a PayPal sandbox wallet already linked.
 2. **Turn into rules, then Confirm and sign.** Keep the example sentence or change a limit. Claude drafts the rules; you read them back before anything is enforced.
-3. **Send the agent shopping.** With the example rules you should see: dog food from Pet Pantry, $26.49, *paid*; paper towels and dish soap from Home Basics, $40.99, *waiting for you* (it's over your $40 line).
-4. **Approve on your phone.** Scan the QR code and tap Approve; the dashboard turns it to *Paid* by itself.
-5. **Send the tricked cart** under *Test the rules*: 10 bags to Bulk Pet Deals, $249.90, *blocked* on the shop list and your cap. Nothing is charged.
+3. **Send the agent shopping** from the *Shop* page (the *Overview* lists these steps and ticks them off). With the example rules you should see: dog food from Pet Pantry, $26.49, *paid*; paper towels and dish soap from Home Basics, $40.99, *waiting for you* (it's over your $40 line).
+4. **Approve on your phone.** On *Approvals*, press *Approve on my phone*, scan the QR code and tap Approve; the page turns it to *Paid* by itself.
+5. **Send the tricked cart** under *Test the rules* on the *Shop* page: 10 bags to Bulk Pet Deals, $249.90, *blocked* on the shop list and your cap. Nothing is charged.
 6. **Open the Ledger** for each payment's rule, PayPal IDs and the hash of the rules you signed.
 
-To try it with your own agent, after step 2 run this in a terminal and then `/mcp` → *Authenticate* in Claude Code, and press Allow in the browser where your demo is open:
+To try it with your own agent (the *Connect an agent* page has the same steps), after step 2 run this in a terminal and then `/mcp` → *Authenticate* in Claude Code, and press Allow in the browser where your demo is open:
 
 ```sh
 claude mcp add --transport http chaperone https://www.chaperone.site/api/mcp
 ```
 
-Then ask: *"Check my Chaperone rules, then find a 5 kg bag of dry dog food and buy it from Pet Pantry."* The payment shows up on your dashboard marked "your agent".
+Then ask: *"Check my Chaperone rules, then find a 5 kg bag of dry dog food and buy it from Pet Pantry."* The payment shows up in your activity marked "your agent".
 
 ## Who it's for
 
@@ -94,7 +94,7 @@ Chaperone is an MCP server at `/api/mcp` (stateless Streamable HTTP; [`src/mcp/h
 claude mcp add --transport http chaperone https://www.chaperone.site/api/mcp
 ```
 
-Then run `/mcp` in Claude Code and choose Authenticate. Chaperone opens in the browser, shows the app's name and the exact rules it would pay under, and the user presses Allow. Behind that: protected-resource and authorization-server metadata ([`.well-known`](src/app/.well-known)), dynamic client registration with signed, stateless client ids, a single-use PKCE code, and an access token bound to the user's mandate ([`src/lib/oauth.ts`](src/lib/oauth.ts)). The agent never handles a key the user had to copy, can't choose a looser mandate, and is listed on the dashboard with a Disconnect button. Clients without sign-in support can use a key from the dashboard instead.
+Then run `/mcp` in Claude Code and choose Authenticate. Chaperone opens in the browser, shows the app's name and the exact rules it would pay under, and the user presses Allow. Behind that: protected-resource and authorization-server metadata ([`.well-known`](src/app/.well-known)), dynamic client registration with signed, stateless client ids, a single-use PKCE code, and an access token bound to the user's mandate ([`src/lib/oauth.ts`](src/lib/oauth.ts)). The agent never handles a key the user had to copy, can't choose a looser mandate, and is listed on the *Connect an agent* page with a Disconnect button. Clients without sign-in support can use a key from that page instead.
 
 The agent gets five tools ([`src/mcp/server.ts`](src/mcp/server.ts)):
 
