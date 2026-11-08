@@ -31,6 +31,42 @@ function Step({ step }: { step: AgentStep }) {
   return <p className="text-[0.92rem] text-ink-3">Chaperone turned down a request: {step.message}</p>;
 }
 
+function inline(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) => (part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : part));
+}
+
+/** Claude answers in light markdown: bold, bullets and blank lines. Rendered as text, never as HTML. */
+function Summary({ text }: { text: string }) {
+  const blocks = text.trim().split(/\n\s*\n/);
+  return (
+    <div className="mt-2 space-y-3 leading-relaxed">
+      {blocks.map((block, b) => {
+        const lines = block.split("\n").filter((l) => l.trim());
+        const bullets = lines.filter((l) => /^\s*[-*•]\s+/.test(l));
+        const heading = lines.length > 1 && /^\*\*[^*]+\*\*:?$/.test(lines[0]!.trim()) ? lines[0]!.trim().replace(/^\*\*|\*\*:?$/g, "").replace(/:$/, "") : null;
+        const body = heading ? lines.slice(1) : lines;
+        return (
+          <div key={b}>
+            {heading && <p className="font-semibold">{heading}</p>}
+            {bullets.length === body.length && body.length > 0 ? (
+              <ul className="mt-1 space-y-1">
+                {body.map((l, i) => (
+                  <li key={i} className="flex gap-2.5">
+                    <span className="mt-2.5 size-1 shrink-0 rounded-full bg-ink-2" />
+                    <span>{inline(l.replace(/^\s*[-*•]\s+/, ""))}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              body.map((l, i) => <p key={i}>{inline(l)}</p>)
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function AgentRun({ example, attempt }: { example: string; attempt: string }) {
   const router = useRouter();
   const [goal, setGoal] = useState(example);
@@ -104,7 +140,6 @@ export function AgentRun({ example, attempt }: { example: string; attempt: strin
         >
           {running ? "Shopping…" : steps.length ? "Send it shopping again" : "Send the agent shopping"}
         </button>
-        <p className="text-[0.88rem] text-ink-2">Claude searches Corner Market, Pet Pantry and Home Basics, then asks Chaperone to pay.</p>
       </div>
 
       <div aria-live="polite" className="mt-5 space-y-3">
@@ -128,7 +163,7 @@ export function AgentRun({ example, attempt }: { example: string; attempt: strin
         {summary && (
           <div className="rounded-xl bg-paper-2 p-4">
             <p className="label text-ink-2">Claude&apos;s summary</p>
-            <p className="mt-2 whitespace-pre-line leading-relaxed">{summary}</p>
+            <Summary text={summary} />
           </div>
         )}
         {error && (

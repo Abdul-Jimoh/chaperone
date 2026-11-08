@@ -95,7 +95,7 @@ export async function confirmMandate(_prev: { error: string } | null, form: Form
   const secrets = { draft: requireEnv("APPROVAL_LINK_SECRET"), signingJwk: JSON.parse(requireEnv("MANDATE_SIGNING_JWK")) };
   const result = await refusable(() => confirmDemoMandate(serverDb(), userId, String(form.get("draft") ?? ""), secrets));
   if (refused(result)) return { error: result.refused };
-  revalidatePath("/app");
+  revalidatePath("/app", "layout");
   return null;
 }
 
@@ -114,7 +114,7 @@ export async function simulate(_prev: SimulateResult | null, form: FormData): Pr
   const deps = paymentDeps();
   const result = await refusable(() => simulatePurchase(deps, demoWorld(), userId, scenario, attempt));
   if (refused(result)) return { ok: false, error: result.refused, nextAttempt };
-  revalidatePath("/app");
+  revalidatePath("/app", "layout");
   if (!result.ok) return { ok: false, error: result.issues.join("; "), nextAttempt };
   const mandate = (await latestMandate(deps.db, userId))!;
   return {
@@ -132,7 +132,7 @@ export async function simulate(_prev: SimulateResult | null, form: FormData): Pr
 export async function revoke() {
   const userId = await requireUser();
   await refusable(() => revokeOwnMandate(paymentDeps(), userId));
-  revalidatePath("/app");
+  revalidatePath("/app", "layout");
 }
 
 export type LinkResult = { ok: true; url: string; qr: string; expiresAt: string } | { ok: false; error: string };
@@ -158,5 +158,5 @@ export async function disconnect(agentKeyId: string) {
   const userId = await requireUser();
   if (!UUID.test(agentKeyId)) return;
   await refusable(() => disconnectAgent(serverDb(), userId, agentKeyId));
-  revalidatePath("/app");
+  revalidatePath("/app", "layout");
 }

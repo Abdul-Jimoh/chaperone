@@ -67,8 +67,8 @@ export default async function ApprovePage({ params }: { params: Promise<{ token:
           <>
             <p className="rounded-xl bg-paper-2 p-4">This purchase was already decided (status: {payment.status}).</p>
             {fromDashboard && (
-              <Link href="/app" className="mt-4 inline-flex h-12 items-center rounded-full bg-ink px-6 text-paper hover:bg-accent">
-                Back to your dashboard
+              <Link href="/app/approvals" className="mt-4 inline-flex h-12 items-center rounded-full bg-ink px-6 text-paper hover:bg-accent">
+                Back to your approvals
               </Link>
             )}
           </>

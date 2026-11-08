@@ -18,7 +18,7 @@ export function Decision({ token, deadline, fromDashboard }: { token: string; de
 
   useEffect(() => {
     if (!decided || !fromDashboard) return;
-    const timer = window.setTimeout(() => router.replace("/app"), 2500);
+    const timer = window.setTimeout(() => router.replace("/app/approvals"), 2500);
     return () => window.clearTimeout(timer);
   }, [decided, fromDashboard, router]);
 
@@ -32,8 +32,8 @@ export function Decision({ token, deadline, fromDashboard }: { token: string; de
         </div>
         {fromDashboard ? (
           <p className="text-ink-2">
-            Taking you back to your dashboard…{" "}
-            <Link href="/app" replace className="font-medium text-ink underline underline-offset-4">
+            Taking you back to your approvals…{" "}
+            <Link href="/app/approvals" replace className="font-medium text-ink underline underline-offset-4">
               Go now
             </Link>
           </p>

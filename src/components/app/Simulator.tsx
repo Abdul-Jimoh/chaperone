@@ -7,7 +7,7 @@ import { decisionLabel, StatusPill } from "./ui";
 
 export type ScenarioCard = { id: string; noun: string; title: string; body: string; expect: string };
 
-export function Simulator({ disabled, attempt, scenarios }: { disabled: boolean; attempt: string; scenarios: ScenarioCard[] }) {
+export function Simulator({ disabled, attempt, scenarios, stacked = false }: { disabled: boolean; attempt: string; scenarios: ScenarioCard[]; stacked?: boolean }) {
   const [result, action, pending] = useActionState<SimulateResult | null, FormData>(simulate, null);
   // Pinned so a background refresh of the page can't swap the attempt id between two clicks.
   const [firstAttempt] = useState(attempt);
@@ -15,7 +15,7 @@ export function Simulator({ disabled, attempt, scenarios }: { disabled: boolean;
 
   return (
     <div>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className={`grid gap-3 ${stacked ? "" : "md:grid-cols-3"}`}>
         {scenarios.map((s) => (
           <form key={s.id} action={action} onSubmit={() => setTrying(s)} className="flex flex-col justify-between gap-4 rounded-2xl border border-line p-4">
             <input type="hidden" name="scenario" value={s.id} />
@@ -46,7 +46,7 @@ export function Simulator({ disabled, attempt, scenarios }: { disabled: boolean;
           <>
             {result?.ok === false && <p className="rounded-xl bg-paper-2 p-4 text-accent-ink">{result.error}</p>}
             {result?.ok && (
-              <div className="flex flex-col gap-2 rounded-xl bg-paper-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className={`flex flex-col gap-2 rounded-xl p-4 ${stacked ? "bg-paper" : "bg-paper-2 sm:flex-row sm:items-center sm:justify-between"}`}>
                 <p>
                   <span className="font-semibold">{decisionLabel(result.decision)}</span>
                   <span className="text-ink-2">

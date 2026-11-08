@@ -1,20 +1,18 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { AppHeader } from "@/components/app/AppHeader";
 import { LedgerGrid, type LedgerRow } from "@/components/app/LedgerGrid";
-import { SHELL } from "@/components/app/ui";
+import { PageHeader } from "@/components/app/ui";
 import { ledgerEvents, mandates, payments } from "@/db/schema";
-import { sessionUserId } from "@/lib/app/session";
 import { shopLabel } from "@/lib/payments/messages";
 import { serverDb } from "@/lib/server";
+import { requireData } from "../data";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Ledger" };
 
 export default async function LedgerPage() {
-  const userId = await sessionUserId();
-  if (!userId) redirect("/app");
+  const { mandate } = await requireData();
+  const userId = mandate.userId;
   const db = serverDb();
 
   const own = await db.select().from(mandates).where(eq(mandates.userId, userId));
@@ -49,18 +47,11 @@ export default async function LedgerPage() {
   }));
 
   return (
-    <>
-      <AppHeader signedIn />
-      <main className={`${SHELL} py-10 lg:py-14`}>
-        <p className="label text-ink-2">Ledger</p>
-        <h1 className="display mt-3 max-w-5xl text-[clamp(2rem,4.4vw,3.6rem)]">Every payment, the rule behind it, and what PayPal did.</h1>
-        <p className="mt-4 max-w-2xl text-ink-2">
-          Each row was checked against the signed mandate whose hash it stores. Sort or filter any column; select a row for its full trail.
-        </p>
-        <div className="mt-8">
-          <LedgerGrid rows={data} />
-        </div>
-      </main>
-    </>
+    <div className="space-y-8">
+      <PageHeader label="Ledger" title="Every payment, the rule behind it, and what PayPal did.">
+        Each row was checked against the signed mandate whose hash it stores. Sort or filter any column; select a row for its full trail.
+      </PageHeader>
+      <LedgerGrid rows={data} />
+    </div>
   );
 }

@@ -51,3 +51,32 @@ export function Meter({ used, limit }: { used: number; limit: number }) {
     </div>
   );
 }
+
+export function PageHeader({ label, title, children, action }: { label: string; title: string; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <header className="flex flex-col gap-5 border-b border-line pb-8 sm:flex-row sm:items-end sm:justify-between">
+      <div className="max-w-3xl">
+        <p className="label text-ink-2">{label}</p>
+        <h1 className="display mt-3 text-[clamp(1.9rem,3.2vw,2.75rem)]">{title}</h1>
+        {children && <div className="mt-3 text-[1.02rem] leading-relaxed text-ink-2">{children}</div>}
+      </div>
+      {action}
+    </header>
+  );
+}
+
+/** A titled block without a box, for pages where boxes would stack on boxes. */
+export function Section({ title, label, children, action, className = "" }: { title: string; label?: string; children: ReactNode; action?: ReactNode; className?: string }) {
+  return (
+    <section className={`min-w-0 ${className}`}>
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <div>
+          {label && <p className="label text-ink-3">{label}</p>}
+          <h2 className="mt-1 text-[1.2rem] font-semibold tracking-tight">{title}</h2>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
