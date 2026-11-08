@@ -18,6 +18,7 @@ export function fakePayPal(shopApps: Record<string, string>) {
   let payeeOverride: string | undefined;
   let omitPayee = false;
   let gate: Promise<void> | undefined;
+  const setupTokens = new Set<string>();
   let onOrder: (() => void) | undefined;
 
   const error = (f: Failure) => {
@@ -38,6 +39,21 @@ export function fakePayPal(shopApps: Record<string, string>) {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     if (requestId && responses.has(requestId)) return Response.json(responses.get(requestId));
 
+    if (url.pathname === "/v3/vault/setup-tokens" && init?.method === "POST") {
+      const setup = { id: `ST-${setupTokens.size + 1}`, status: "PAYER_ACTION_REQUIRED", links: [{ rel: "approve", href: "https://sandbox.paypal.test/approve" }] };
+      setupTokens.add(setup.id);
+      calls.push({ op: "setup", caller, body, requestId });
+      responses.set(requestId!, setup);
+      return Response.json(setup);
+    }
+    if (url.pathname === "/v3/vault/payment-tokens" && init?.method === "POST") {
+      calls.push({ op: "vault", caller, body, requestId });
+      const setupId = body?.payment_source?.token?.id;
+      if (!setupTokens.has(setupId)) return error({ status: 404, name: "RESOURCE_NOT_FOUND", issue: "INVALID_RESOURCE_ID" });
+      const token = { id: `PT-${setupId}`, customer: { id: "CUST-1" }, payment_source: { paypal: { email_address: "buyer@example.test" } }, links: [] };
+      responses.set(requestId!, token);
+      return Response.json(token);
+    }
     if (url.pathname === "/v2/checkout/orders" && init?.method === "POST") {
       calls.push({ op: "order", caller, body, requestId });
       onOrder?.();

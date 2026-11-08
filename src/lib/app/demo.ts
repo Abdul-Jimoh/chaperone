@@ -10,7 +10,7 @@ import { runShoppingAgent } from "@/lib/agent/run";
 import type { ProductSearch } from "@/lib/agent/catalog";
 import type { Llm } from "@/lib/llm/llm";
 import { compileMandate } from "@/lib/policy/compile";
-import { describePolicy, formatCents } from "@/lib/policy/describe";
+import { describePolicy, formatCents, scheduleLine } from "@/lib/policy/describe";
 import { evaluate } from "@/lib/policy/evaluate";
 import { openDraft, sealDraft } from "./drafts";
 import { spentByPeriod } from "@/lib/ledger/reserve";
@@ -64,7 +64,13 @@ export type ReadBack = { statement: string; token: string; rules: string[]; notE
 export type CompileOutcome = ({ ok: true } & ReadBack) | { ok: false; problems: string[] };
 
 function readBack(secret: string, userId: string, statement: string, policy: Mandate["policy"], notEnforced: string[]): ReadBack {
-  return { statement, token: sealDraft(secret, { userId, statement, policy }), rules: describePolicy(policy), notEnforced };
+  const schedule = scheduleLine(policy);
+  return {
+    statement,
+    token: sealDraft(secret, { userId, statement, policy }),
+    rules: describePolicy(policy).filter((line) => line !== schedule),
+    notEnforced: schedule ? [...notEnforced, `${schedule.toLowerCase()} (shown as a reminder; a trip off schedule isn't blocked)`] : notEnforced,
+  };
 }
 
 /** The example sentence as Claude compiled it when it was recorded; offered when Claude can't be reached. */

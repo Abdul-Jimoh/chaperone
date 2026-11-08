@@ -22,6 +22,7 @@ import {
   type Scenario,
 } from "@/lib/app/demo";
 import { appOrigin } from "@/lib/app/origin";
+import { finishWalletLink, startWalletLink, WalletLinkError } from "@/lib/app/wallet";
 import { clearSession, sessionUserId, setSession } from "@/lib/app/session";
 import { ConfigError, requireEnv } from "@/lib/env";
 import { LlmBudgetExceededError } from "@/lib/llm/llm";
@@ -159,4 +160,38 @@ export async function disconnect(agentKeyId: string) {
   if (!UUID.test(agentKeyId)) return;
   await refusable(() => disconnectAgent(serverDb(), userId, agentKeyId));
   revalidatePath("/app", "layout");
+}
+
+export type WalletStart = { ok: true; clientToken: string } | { ok: false; error: string };
+
+/** A browser-safe PayPal token for the JS SDK v6 button. It can open PayPal for the shopper; it can't move money. */
+export async function walletClientToken(): Promise<WalletStart> {
+  await requireUser();
+  try {
+    return { ok: true, clientToken: await paymentDeps().platform.browserToken() };
+  } catch {
+    return { ok: false, error: "PayPal isn't reachable right now. The demo wallet still works." };
+  }
+}
+
+export async function startWalletLinkAction(): Promise<{ setupToken: string; ticket: string }> {
+  const userId = await requireUser();
+  return startWalletLink(walletDeps(), userId, await appOrigin());
+}
+
+export async function finishWalletLinkAction(setupToken: string, ticket: string): Promise<{ ok: true; email: string } | { ok: false; error: string }> {
+  const userId = await requireUser();
+  if (!/^[A-Za-z0-9-]{4,64}$/.test(setupToken) || typeof ticket !== "string") return { ok: false, error: "That PayPal link isn't valid." };
+  try {
+    const wallet = await finishWalletLink(walletDeps(), userId, setupToken, ticket);
+    revalidatePath("/app", "layout");
+    return { ok: true, email: wallet.kind === "own" ? wallet.email : "" };
+  } catch (error) {
+    if (error instanceof WalletLinkError) return { ok: false, error: error.message };
+    return { ok: false, error: "PayPal didn't save the wallet. Try again, or keep the demo wallet." };
+  }
+}
+
+function walletDeps() {
+  return { db: serverDb(), platform: paymentDeps().platform, secret: requireEnv("APPROVAL_LINK_SECRET") };
 }

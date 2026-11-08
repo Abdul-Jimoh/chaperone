@@ -4,7 +4,9 @@ import { ActivityList } from "@/components/app/Activity";
 import { Onboarding } from "@/components/app/Onboarding";
 import { StartScreen } from "@/components/app/StartScreen";
 import { Meter, PageHeader, Section } from "@/components/app/ui";
+import { walletOf } from "@/lib/app/wallet";
 import { DEMO_STATEMENT } from "@/lib/demo";
+import { serverDb } from "@/lib/server";
 import { formatCents } from "@/lib/policy/describe";
 import { appData, type AppData } from "./data";
 
@@ -43,7 +45,7 @@ function steps({ recent, agents }: AppData) {
 export default async function AppPage() {
   const { userId, data } = await appData();
   if (!userId) return <StartScreen />;
-  if (!data) return <Onboarding example={DEMO_STATEMENT} />;
+  if (!data) return <Onboarding example={DEMO_STATEMENT} wallet={await walletOf(serverDb(), userId)} />;
 
   const { mandate, spent, recent, waiting } = data;
   const active = mandate.status === "active";

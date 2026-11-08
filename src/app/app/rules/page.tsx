@@ -1,18 +1,35 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { LinkPayPal } from "@/components/app/LinkPayPal";
 import { RevokeButton } from "@/components/app/RevokeButton";
 import { Meter, PageHeader, Section } from "@/components/app/ui";
-import { describePolicy, formatCents } from "@/lib/policy/describe";
-import { requireData } from "../data";
+import { walletOf } from "@/lib/app/wallet";
+import { describePolicy, formatCents, scheduleLine } from "@/lib/policy/describe";
+import type { Policy } from "@/lib/policy/schema";
+import { serverDb } from "@/lib/server";
+import { appData, requireData } from "../data";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Rules" };
 
+function nextTrip(last: Date, { every, unit }: NonNullable<Policy["schedule"]>): Date {
+  const next = new Date(last);
+  if (unit === "month") next.setUTCMonth(next.getUTCMonth() + every);
+  else next.setUTCDate(next.getUTCDate() + every * (unit === "week" ? 7 : 1));
+  return next;
+}
+
+const day = (d: Date) => d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+
 const PERIOD: Record<string, string> = { run: "Each shopping run", day: "Today", week: "This week", month: "This month" };
 
 export default async function RulesPage() {
-  const { mandate, spent } = await requireData();
+  const { mandate, spent, recent } = await requireData();
+  const { userId } = await appData();
+  const wallet = await walletOf(serverDb(), userId!);
   const { policy } = mandate;
   const active = mandate.status === "active";
+  const lastTrip = recent.find((p) => p.runId?.startsWith("agent-"))?.createdAt;
 
   return (
     <div className="space-y-12">
@@ -37,7 +54,9 @@ export default async function RulesPage() {
 
           <Section label="Enforced" title="The rules Chaperone checks">
             <ul className="divide-y divide-line border-y border-line">
-              {describePolicy(policy).map((line) => (
+              {describePolicy(policy)
+                .filter((line) => line !== scheduleLine(policy))
+                .map((line) => (
                 <li key={line} className="flex gap-3 py-3">
                   <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
                   {line}
@@ -67,6 +86,34 @@ export default async function RulesPage() {
               ))}
             </ul>
             <p className="mt-4 text-[0.88rem] text-ink-2">Held and paid purchases count. A released hold gives the money back.</p>
+          </Section>
+
+          {policy.schedule && (
+            <Section label="Schedule" title={policy.schedule.every === 1 ? `Once a ${policy.schedule.unit}` : `Every ${policy.schedule.every} ${policy.schedule.unit}s`}>
+              <dl className="grid grid-cols-2 gap-4">
+                <div>
+                  <dt className="text-[0.88rem] text-ink-2">Last trip</dt>
+                  <dd className="mt-1 font-medium">{lastTrip ? day(lastTrip) : "Not yet"}</dd>
+                </div>
+                <div>
+                  <dt className="text-[0.88rem] text-ink-2">Next trip due</dt>
+                  <dd className="mt-1 font-medium">{lastTrip ? day(nextTrip(lastTrip, policy.schedule)) : "Now"}</dd>
+                </div>
+              </dl>
+              <p className="mt-4 text-[0.88rem] leading-relaxed text-ink-2">
+                A reminder, not a limit: Chaperone doesn&apos;t block a trip off schedule. In this demo you start each trip yourself, so no trip spends Claude credits while
+                nobody is watching.
+              </p>
+              {active && (
+                <Link href="/app/shop" className="mt-4 inline-flex h-10 items-center rounded-full border border-line-strong px-4 font-medium hover:border-ink">
+                  Go shopping now
+                </Link>
+              )}
+            </Section>
+          )}
+
+          <Section label="Pays with" title="PayPal wallet">
+            <LinkPayPal wallet={wallet} />
           </Section>
 
           <Section label="Signed" title="The mandate itself">

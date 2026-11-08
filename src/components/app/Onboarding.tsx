@@ -3,10 +3,12 @@
 import { useState, useTransition } from "react";
 import { compileRules, exampleRules, type CompileResponse } from "@/app/app/actions";
 import type { ReadBack } from "@/lib/app/demo";
+import type { Wallet } from "@/lib/app/wallet";
 import { ConfirmForm } from "./ConfirmForm";
+import { LinkPayPal } from "./LinkPayPal";
 import { Card, SHELL } from "./ui";
 
-export function Onboarding({ example }: { example: string }) {
+export function Onboarding({ example, wallet }: { example: string; wallet: Wallet }) {
   const [statement, setStatement] = useState(example);
   const [draft, setDraft] = useState<ReadBack | null>(null);
   const [failure, setFailure] = useState<Exclude<CompileResponse, { ok: true }> | null>(null);
@@ -38,13 +40,7 @@ export function Onboarding({ example }: { example: string }) {
       <div className="mt-10 grid gap-4 lg:mt-14 lg:grid-cols-12 lg:items-start">
         <div className="space-y-4 lg:col-span-5">
           <Card label="Step 1" title="PayPal is linked">
-            <p className="flex items-start gap-3 leading-relaxed text-ink-2">
-              <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-mint text-go" aria-hidden>
-                ✓
-              </span>
-              This demo uses a PayPal sandbox buyer whose wallet is already saved, so the agent can pay while you&apos;re away. Every payment
-              still needs your rules to pass.
-            </p>
+            <LinkPayPal wallet={wallet} />
           </Card>
 
           <Card label="Step 2" title="Your rules, in your words">

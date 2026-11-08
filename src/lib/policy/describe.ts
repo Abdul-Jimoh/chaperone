@@ -64,14 +64,19 @@ export function describePolicy(policy: Policy): string[] {
   for (const b of policy.budgets) lines.push(clauseText(policy, `budget.${b.period}`));
   if (policy.maxQuantityPerItem !== null) lines.push(clauseText(policy, "item.quantity"));
   if (policy.approvalThresholdCents !== null) lines.push(clauseText(policy, "approval.threshold"));
-  if (policy.schedule) {
-    const { every, unit } = policy.schedule;
-    lines.push(every === 1 ? `Shop once a ${unit}` : `Shop every ${every} ${unit}s`);
-  }
+  const schedule = scheduleLine(policy);
+  if (schedule) lines.push(schedule);
   lines.push(
     policy.expiresAt
       ? `Valid until ${new Date(policy.expiresAt).toUTCString()}`
       : "Valid until you revoke it",
   );
   return lines;
+}
+
+/** The evaluator doesn't check the schedule; it tells the agent (and the person) when a trip is due. */
+export function scheduleLine(policy: Policy): string | null {
+  if (!policy.schedule) return null;
+  const { every, unit } = policy.schedule;
+  return every === 1 ? `Shop once a ${unit}` : `Shop every ${every} ${unit}s`;
 }

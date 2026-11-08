@@ -44,23 +44,32 @@ export function createPayPalClient(config: PayPalConfig) {
   const doFetch = config.fetch ?? fetch;
   let token: { value: string; expiresAt: number } | undefined;
 
-  async function accessToken(): Promise<string> {
-    // Refresh a minute early so a token never expires mid-request.
-    if (token && token.expiresAt - 60_000 > Date.now()) return token.value;
+  async function oauthToken(body: string): Promise<{ value: string; expiresAt: number }> {
     const res = await doFetch(`${baseUrl}/v1/oauth2/token`, {
       method: "POST",
       headers: {
         Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: "grant_type=client_credentials",
+      body,
     });
     const json = (await res.json()) as { access_token?: string; expires_in?: number } & PayPalErrorBody;
     if (!res.ok || !json.access_token) {
       throw new PayPalError(res.status, json, res.headers.get("paypal-debug-id") ?? undefined);
     }
-    token = { value: json.access_token, expiresAt: Date.now() + (json.expires_in ?? 0) * 1000 };
+    return { value: json.access_token, expiresAt: Date.now() + (json.expires_in ?? 0) * 1000 };
+  }
+
+  async function accessToken(): Promise<string> {
+    // Refresh a minute early so a token never expires mid-request.
+    if (token && token.expiresAt - 60_000 > Date.now()) return token.value;
+    token = await oauthToken("grant_type=client_credentials");
     return token.value;
+  }
+
+  /** A browser-safe token for the JS SDK v6: it can start PayPal sessions but can't call the REST API. */
+  async function browserToken(): Promise<string> {
+    return (await oauthToken("grant_type=client_credentials&response_type=client_token&intent=sdk_init")).value;
   }
 
   async function request<T>(path: string, options: RequestOptions = {}): Promise<{ data: T; debugId?: string }> {
@@ -86,5 +95,5 @@ export function createPayPalClient(config: PayPalConfig) {
     return { data: json as T, debugId };
   }
 
-  return { request, accessToken };
+  return { request, accessToken, browserToken };
 }

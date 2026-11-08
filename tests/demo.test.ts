@@ -7,6 +7,7 @@ import {
   approvalLinkFor,
   dashboard,
   DemoNotReadyError,
+  exampleReadBack,
   NotYoursError,
   revokeOwnMandate,
   simulatePurchase,
@@ -56,6 +57,12 @@ async function shopper() {
 }
 
 describe("judge-mode demo", () => {
+  it("doesn't list the schedule among the rules it checks, because the evaluator doesn't check it", () => {
+    const back = exampleReadBack(world, randomUUID(), "test-draft-secret");
+    expect(back.rules.some((r) => /every 2 weeks/i.test(r))).toBe(false);
+    expect(back.notEnforced.some((r) => /every 2 weeks/i.test(r))).toBe(true);
+  });
+
   it("refuses to start before the shared sandbox wallet is seeded", async () => {
     await expect(startDemoShopper(db, "test-client")).rejects.toBeInstanceOf(DemoNotReadyError);
   });
