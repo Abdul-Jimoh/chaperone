@@ -78,7 +78,7 @@ export function AppShell({ data, children }: { data: AppData; children: ReactNod
       </aside>
 
       <div className="min-w-0">
-        <header className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur lg:hidden">
+        <header className="sticky top-0 z-20 border-b border-line bg-paper lg:hidden">
           <div className="flex h-14 items-center justify-between gap-3 px-5 sm:px-8">
             <Link href="/" aria-label="Chaperone home">
               <Logo />

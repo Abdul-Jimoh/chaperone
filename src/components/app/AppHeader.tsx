@@ -3,7 +3,8 @@ import { endDemo } from "@/app/app/actions";
 import { Logo, LogoMark } from "@/components/brand/Logo";
 import { SHELL } from "./ui";
 
-export function AppHeader({ signedIn }: { signedIn: boolean }) {
+/** Header for pages outside the app shell; `links` only once there are rules to show. */
+export function AppHeader({ signedIn, links = signedIn }: { signedIn: boolean; links?: boolean }) {
   return (
     <header className="border-b border-line">
       <div className={`${SHELL} flex h-16 items-center justify-between gap-4`}>
@@ -22,7 +23,7 @@ export function AppHeader({ signedIn }: { signedIn: boolean }) {
           )}
         </Link>
         <nav className="flex items-center sm:gap-2">
-          {signedIn && (
+          {links && (
             <>
               <Link href="/app" className="whitespace-nowrap rounded-full px-2 py-2 text-[0.95rem] text-ink-2 hover:text-ink sm:px-3">
                 Dashboard

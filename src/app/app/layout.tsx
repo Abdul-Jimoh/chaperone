@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (!data) {
     return (
       <>
-        <AppHeader signedIn={Boolean(userId)} />
+        <AppHeader signedIn={Boolean(userId)} links={false} />
         <main>{children}</main>
       </>
     );

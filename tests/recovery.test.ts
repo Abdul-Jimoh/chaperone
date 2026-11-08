@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { ledgerEvents, payments, reservations } from "@/db/schema";
 import { approvalLinkFor, NotYoursError } from "@/lib/app/demo";
 import { decideApproval, issueApprovalLink, sweepApprovals, type ApprovalDeps } from "@/lib/payments/approvals";
-import { MAX_CAPTURE_ATTEMPTS, requestPayment, type PaymentResult } from "@/lib/payments/service";
+import { MAX_CAPTURE_ATTEMPTS, requestPayment, revokeMandate, type PaymentResult } from "@/lib/payments/service";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, seedLinkedMandate, testDb } from "./support/db";
 import { cart, SHOP_A, SHOP_B, samplePolicy } from "./support/fixtures";
@@ -91,6 +91,85 @@ describe("a capture that doesn't go through", () => {
     expect(await reservation(stuck!.id)).toBe("captured");
     const captures = paypal.calls.filter((c) => c.op === "capture");
     expect(captures).toHaveLength(2);
+    expect(captures[1]!.requestId).toBe(captures[0]!.requestId);
+  });
+
+  it("records a capture PayPal made but whose answer was lost, without capturing twice", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = "lost";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    delete paypal.fail.capture;
+    advance(3);
+    await sweepApprovals(deps);
+    const [row] = await db.select().from(payments);
+    // A new request id would have hit PayPal's "already captured" and logged a failure instead.
+    expect(row).toMatchObject({ status: "captured", paypalCaptureId: "CAP-AUTH1" });
+    expect(new Set(paypal.calls.filter((c) => c.op === "capture").map((c) => c.requestId)).size).toBe(1);
+    const types = (await db.select().from(ledgerEvents).where(eq(ledgerEvents.paymentId, row!.id))).map((e) => e.type);
+    expect(types).not.toContain("capture.failed");
+  });
+
+  it("asks PayPal before voiding an interrupted capture on a revoked mandate", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = "lost";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    delete paypal.fail.capture;
+    await revokeMandate(deps, mandate.id);
+    advance(3);
+    await sweepApprovals(deps);
+    const [row] = await db.select().from(payments);
+    expect(row!.status).toBe("captured");
+    expect(await reservation(row!.id)).toBe("captured");
+    expect(paypal.calls.filter((c) => c.op === "void")).toEqual([]);
+  });
+
+  it("voids an interrupted capture on a revoked mandate when PayPal never captured it", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = "network";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    delete paypal.fail.capture;
+    await revokeMandate(deps, mandate.id);
+    advance(3);
+    await sweepApprovals(deps);
+    const [row] = await db.select().from(payments);
+    expect(row!.status).toBe("voided");
+    expect(await reservation(row!.id)).toBe("released");
+  });
+});
+
+describe("a hold whose answer from PayPal is unclear", () => {
+  it("stays open after a PayPal 5xx, and is resumed with the same request id instead of a second hold", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.order = { status: 500, name: "INTERNAL_SERVER_ERROR", issue: "INTERNAL_SERVICE_ERROR" };
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("PayPal 500");
+    expect((await db.select().from(payments))[0]!.status).toBe("authorizing");
+
+    // Re-sent while the first is unresolved: the same purchase, not a new one.
+    const again = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
+    expect(again.replayed).toBe(true);
+
+    delete paypal.fail.order;
+    advance(3);
+    await sweepApprovals(deps);
+    expect((await db.select().from(payments))[0]!.status).toBe("captured");
+    const orders = paypal.calls.filter((c) => c.op === "order");
+    expect(new Set(orders.map((c) => c.requestId)).size).toBe(1);
+  });
+
+  it("isn't placed twice when PayPal placed it but the answer was lost", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.order = "lost";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    delete paypal.fail.order;
+    advance(3);
+    await sweepApprovals(deps);
+    expect((await db.select().from(payments))[0]!.status).toBe("captured");
+    expect(paypal.auths.size).toBe(1);
   });
 });
 
@@ -108,6 +187,20 @@ describe("buying a cart again", () => {
     const retried = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: bigCart() }));
     expect(retried).toMatchObject({ replayed: true });
     expect(retried.payment.id).toBe(again.payment.id);
+  });
+});
+
+describe("a denied cart", () => {
+  it("is replayed, not decided again, the same day", async () => {
+    const { deps } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const tooBig = cart({ items: [{ productId: "beans-1kg", title: "Whole bean coffee, 1 kg", unitPriceCents: 9_000, quantity: 1, category: "coffee" }] });
+    const first = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: tooBig }));
+    expect(first.decision).toBe("deny");
+    const second = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: tooBig }));
+    expect(second).toMatchObject({ replayed: true, decision: "deny" });
+    expect(second.payment.id).toBe(first.payment.id);
+    expect(await db.select().from(payments)).toHaveLength(1);
   });
 });
 

@@ -7,7 +7,7 @@ import { PayPalError, type PayPalClient } from "@/lib/paypal/client";
 import { toCents } from "@/lib/paypal/money";
 import { createAuthorizeOrder, firstAuthorization } from "@/lib/paypal/orders";
 import { voidHold, type PayeeClients } from "@/lib/paypal/payees";
-import { captureAuthorization } from "@/lib/paypal/payments";
+import { captureAuthorization, getAuthorization } from "@/lib/paypal/payments";
 import type { Evaluation } from "@/lib/policy/evaluate";
 import { cartSchema } from "@/lib/policy/schema";
 
@@ -174,8 +174,10 @@ async function placeHold(deps: PaymentDeps, payment: Payment): Promise<Payment> 
       requestId: paypalRequestId(payment.idempotencyKey, "order"),
     });
   } catch (error) {
-    // Only a definite PayPal answer means no hold exists; a network failure leaves the row for a retry.
-    if (error instanceof PayPalError) return failAuthorizing(deps, payment, "hold.failed", paypalDetail(error));
+    // Only a definite PayPal refusal (4xx) means no hold exists. A network failure or a PayPal 5xx may have placed
+    // one, so the row stays authorizing and is resumed with the same request id; marking it failed would let the
+    // same cart be bought again (D28) under a new id, leaving the first hold orphaned.
+    if (error instanceof PayPalError && error.status < 500) return failAuthorizing(deps, payment, "hold.failed", paypalDetail(error));
     throw error;
   }
 
@@ -249,7 +251,11 @@ export class CaptureNotAllowedError extends Error {}
  * Captures a hold. Allowed only for an allowed payment, or a needs_approval payment the user approved,
  * with no anomaly flags, on a mandate that is still active.
  */
-export async function capturePayment(deps: PaymentDeps, paymentId: string, options: { resume?: boolean } = {}): Promise<Payment> {
+/**
+ * `resume` picks up a capture interrupted after its claim. `captured` says PayPal already reports the authorization as
+ * captured: the money has moved, so the capture is recorded even if the mandate was revoked since.
+ */
+export async function capturePayment(deps: PaymentDeps, paymentId: string, options: { resume?: boolean; captured?: boolean } = {}): Promise<Payment> {
   const now = nowOf(deps);
   const claim = await deps.db.transaction(async (tx) => {
     const current = await getPayment(tx, paymentId);
@@ -257,7 +263,7 @@ export async function capturePayment(deps: PaymentDeps, paymentId: string, optio
     const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("no key update");
     const interrupted = options.resume && payment!.status === "capturing" && now.getTime() - payment!.updatedAt.getTime() > STALE_CLAIM_MS;
     if (payment!.status !== "authorized" && !interrupted) return { kind: "skip" as const, payment: payment! };
-    if (mandate!.status === "revoked") {
+    if (mandate!.status === "revoked" && !(interrupted && options.captured)) {
       if (interrupted) await tx.update(payments).set({ status: "authorized", updatedAt: now }).where(eq(payments.id, paymentId));
       return { kind: "revoked" as const, payment: payment! };
     }
@@ -408,9 +414,19 @@ export async function resumeStuckPayments(deps: PaymentDeps, limit = 20): Promis
     try {
       if (payment.status === "authorizing") results.push(await placeHold(deps, payment));
       else if (payment.status === "voiding") results.push(await voidPayment(deps, payment.id, "resumed", { resume: true }));
-      else results.push(await capturePayment(deps, payment.id, { resume: true }));
+      else if (payment.status === "capturing") {
+        // The lost request may have captured already; PayPal's own record decides before anything is voided.
+        const auth = await getAuthorization(deps.platform, payment.paypalAuthorizationId!);
+        results.push(await capturePayment(deps, payment.id, { resume: true, captured: ["CAPTURED", "PARTIALLY_CAPTURED"].includes(auth.status) }));
+      } else results.push(await capturePayment(deps, payment.id, { resume: true }));
     } catch (error) {
       console.warn(`resuming payment ${payment.id} failed:`, error instanceof Error ? error.message : error);
+      // To the back of the queue, so rows that keep failing can't fill every sweep.
+      await deps.db
+        .update(payments)
+        .set({ updatedAt: nowOf(deps) })
+        .where(and(eq(payments.id, payment.id), eq(payments.status, payment.status)))
+        .catch(() => {});
     }
   }
   return results;

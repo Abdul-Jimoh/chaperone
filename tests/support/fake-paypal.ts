@@ -2,7 +2,8 @@ import { createPayPalClient } from "@/lib/paypal/client";
 import { createPayeeClients } from "@/lib/paypal/payees";
 
 type Auth = { id: string; status: string; amount: { currency_code: string; value: string }; payee: string };
-type Failure = { status: number; name: string; issue: string } | "network";
+// "network": the connection drops before PayPal acts. "lost": PayPal acts, then the response never arrives.
+type Failure = { status: number; name: string; issue: string } | "network" | "lost";
 
 /**
  * Enough of the PayPal sandbox to run the payment service: orders with vault holds, capture by the
@@ -11,7 +12,7 @@ type Failure = { status: number; name: string; issue: string } | "network";
 export function fakePayPal(shopApps: Record<string, string>) {
   const auths = new Map<string, Auth>();
   const responses = new Map<string, unknown>();
-  const calls: { op: string; caller: string; body?: unknown }[] = [];
+  const calls: { op: string; caller: string; body?: unknown; requestId?: string | null }[] = [];
   const fail: Partial<Record<"order" | "capture" | "void", Failure>> = {};
   let counter = 0;
   let payeeOverride: string | undefined;
@@ -21,7 +22,7 @@ export function fakePayPal(shopApps: Record<string, string>) {
 
   const error = (f: Failure) => {
     // The connection drops after PayPal may already have acted: the caller can't tell which.
-    if (f === "network") throw new TypeError("fetch failed");
+    if (f === "network" || f === "lost") throw new TypeError("fetch failed");
     return Response.json({ name: f.name, details: [{ issue: f.issue }], debug_id: "dbg" }, { status: f.status });
   };
 
@@ -38,10 +39,10 @@ export function fakePayPal(shopApps: Record<string, string>) {
     if (requestId && responses.has(requestId)) return Response.json(responses.get(requestId));
 
     if (url.pathname === "/v2/checkout/orders" && init?.method === "POST") {
-      calls.push({ op: "order", caller, body });
+      calls.push({ op: "order", caller, body, requestId });
       onOrder?.();
       if (gate) await gate;
-      if (fail.order) return error(fail.order);
+      if (fail.order && fail.order !== "lost") return error(fail.order);
       const unit = body.purchase_units[0];
       const auth: Auth = {
         id: `AUTH${++counter}`,
@@ -63,6 +64,7 @@ export function fakePayPal(shopApps: Record<string, string>) {
         ],
       };
       responses.set(requestId!, order);
+      if (fail.order === "lost") return error("lost");
       return Response.json(order);
     }
 
@@ -73,15 +75,16 @@ export function fakePayPal(shopApps: Record<string, string>) {
 
     if (!match[2]) return Response.json(view());
     if (match[2] === "/capture") {
-      calls.push({ op: "capture", caller });
-      if (fail.capture) return error(fail.capture);
+      calls.push({ op: "capture", caller, requestId });
+      if (fail.capture && fail.capture !== "lost") return error(fail.capture);
       if (auth.status !== "CREATED") return error({ status: 422, name: "UNPROCESSABLE_ENTITY", issue: "AUTHORIZATION_ALREADY_CAPTURED" });
       auth.status = "CAPTURED";
       const capture = { id: `CAP-${auth.id}`, status: "COMPLETED", amount: auth.amount, final_capture: true };
       responses.set(requestId!, capture);
+      if (fail.capture === "lost") return error("lost");
       return Response.json(capture);
     }
-    calls.push({ op: "void", caller });
+    calls.push({ op: "void", caller, requestId });
     if (fail.void) return error(fail.void);
     if (shopApps[caller] !== auth.payee) return error({ status: 403, name: "PERMISSION_DENIED", issue: "PERMISSION_DENIED" });
     if (auth.status !== "CREATED") return error({ status: 422, name: "UNPROCESSABLE_ENTITY", issue: "CANNOT_BE_VOIDED" });
