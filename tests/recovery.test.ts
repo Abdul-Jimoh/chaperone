@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { ledgerEvents, payments, reservations } from "@/db/schema";
 import { approvalLinkFor, NotYoursError } from "@/lib/app/demo";
 import { decideApproval, issueApprovalLink, sweepApprovals, type ApprovalDeps } from "@/lib/payments/approvals";
-import { MAX_CAPTURE_ATTEMPTS, requestPayment, revokeMandate, type PaymentResult } from "@/lib/payments/service";
+import { MAX_CAPTURE_ATTEMPTS, requestPayment, resumeStuckPayments, revokeMandate, type PaymentResult } from "@/lib/payments/service";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, seedLinkedMandate, testDb } from "./support/db";
 import { cart, SHOP_A, SHOP_B, samplePolicy } from "./support/fixtures";
@@ -187,6 +187,32 @@ describe("buying a cart again", () => {
     const retried = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: bigCart() }));
     expect(retried).toMatchObject({ replayed: true });
     expect(retried.payment.id).toBe(again.payment.id);
+  });
+});
+
+describe("the sweep", () => {
+  it("moves a row that keeps failing to the back, so it can't starve the others", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = "network";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    const [broken] = await db.select().from(payments);
+    // PayPal can't find it, so every attempt to resume it fails.
+    await db.update(payments).set({ paypalAuthorizationId: "AUTH-MISSING" }).where(eq(payments.id, broken!.id));
+    delete paypal.fail.capture;
+
+    advance(1);
+    paypal.fail.order = "network";
+    const other = cart({ payeeMerchantId: SHOP_B, items: [{ productId: "kibble-2kg", title: "Dry dog food, 2 kg", unitPriceCents: 1_500, quantity: 1, category: "dog-food" }] });
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: other })).rejects.toThrow("fetch failed");
+    delete paypal.fail.order;
+
+    advance(3);
+    await resumeStuckPayments(deps, 1);
+    await resumeStuckPayments(deps, 1);
+    const rows = await db.select().from(payments);
+    expect(rows.find((r) => r.id === broken!.id)!.status).toBe("capturing");
+    expect(rows.find((r) => r.id !== broken!.id)!.status).toBe("captured");
   });
 });
 
