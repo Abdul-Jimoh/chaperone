@@ -54,6 +54,7 @@ const EVENT_LABEL: Record<string, string> = {
   "approval.expired": "No answer: timed out",
   "capture.completed": "Captured: shop paid",
   "capture.failed": "Capture failed",
+  "void.failed": "Cancelling the hold failed",
   anomaly: "Anomaly flagged",
 };
 

@@ -245,7 +245,10 @@ export async function revokeOwnMandate(deps: PaymentDeps, userId: string) {
 }
 
 /** Issued only to the signed-in owner: a link in an agent's hands would let it approve itself (D12). */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function approvalLinkFor(deps: ApprovalDeps, userId: string, paymentId: string) {
+  if (!UUID.test(paymentId)) throw new NotYoursError("That payment isn't yours.");
   const [row] = await deps.db
     .select({ id: payments.id })
     .from(payments)

@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { mandates, payments } from "@/db/schema";
+import { mcpRunId } from "@/lib/ledger/idempotency";
 import { spentByPeriod, type Payment } from "@/lib/ledger/reserve";
 import { sweepApprovals } from "@/lib/payments/approvals";
 import { outcomeMessage, shopName } from "@/lib/payments/messages";
@@ -36,8 +37,8 @@ export const cartInput = {
     )
     .min(1)
     .max(20),
-  shipping_cents: z.number().int().optional(),
-  tax_cents: z.number().int().optional(),
+  shipping_cents: z.number().int().optional().describe("Only for shops outside the catalog; catalog shops' shipping and tax are set by Chaperone."),
+  tax_cents: z.number().int().optional().describe("Only for shops outside the catalog."),
 };
 
 export type CartInput = z.infer<z.ZodObject<typeof cartInput>>;
@@ -89,6 +90,11 @@ async function toCart(input: CartInput, mandate: MandateRow, shopping?: Shopping
   if (payee && catalogShops.has(payee) && input.items.some((i) => !i.listing_id)) {
     issues.push("This shop sells through the catalog: buy its items by listing_id from search_products, so the price is the shop's.");
   }
+  // Otherwise an agent could lift a $2 catalog item to just under the ask-me line with "shipping".
+  const catalogShop = payee !== undefined && catalogShops.has(payee);
+  if (catalogShop && ((input.shipping_cents ?? 0) !== 0 || (input.tax_cents ?? 0) !== 0)) {
+    issues.push("Catalog shops' shipping and tax are set by Chaperone (free in this demo); leave shipping_cents and tax_cents out.");
+  }
   if (issues.length) return { issues };
 
   const known = [...new Map(input.items.flatMap((i) => (i.listing_id ? [[i.listing_id, listings.get(i.listing_id)!]] : []))).values()];
@@ -135,8 +141,7 @@ async function loadMandate(deps: PaymentDeps, mandateId: string) {
 }
 
 async function budgets(deps: PaymentDeps, mandateId: string, policy: Policy, now: Date) {
-  // MCP requests carry no run, so a per-run budget limits each request on its own.
-  const spent = await spentByPeriod(deps.db, mandateId, policy, null, now);
+  const spent = await spentByPeriod(deps.db, mandateId, policy, mcpRunId(mandateId, now, policy.timezone), now);
   return {
     spent,
     rows: policy.budgets.map((b) => ({
@@ -239,7 +244,9 @@ export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, i
     return { error: "invalid_cart", issues: resolved.issues, message: "The cart is malformed; nothing was recorded or charged." };
   }
   await sweep(deps);
-  const result = await requestPayment(deps, { mandateId, runId: null, source: "mcp", cart: resolved.cart });
+  const now = deps.clock?.() ?? new Date();
+  const runId = mcpRunId(mandateId, now, mandate.policy.timezone);
+  const result = await requestPayment(deps, { mandateId, runId, source: "mcp", cart: resolved.cart });
   if (!result.ok) {
     return { error: "invalid_cart", issues: result.issues, message: "The cart is malformed; nothing was recorded or charged." };
   }

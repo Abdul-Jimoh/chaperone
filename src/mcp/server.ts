@@ -40,7 +40,7 @@ export function createMcpServer(deps: PaymentDeps, mandateId: string, shopping?:
       title: "Request a payment",
       description:
         "Pay one shop for a cart: listing ids from search_products, or titled, priced items for shops outside the catalog. Places a PayPal hold and captures it if the mandate allows, waits for the user if it " +
-        "needs approval, and charges nothing if denied. Sending the same cart again the same day returns the first result instead of paying twice.",
+        "needs approval, and charges nothing if denied. Sending the same cart again the same day returns the first result instead of paying twice, unless its hold was released (rejected or expired). A per-run budget covers everything MCP agents spend under this mandate in one day.",
       inputSchema: cartInput,
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },

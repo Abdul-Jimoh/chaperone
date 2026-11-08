@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "@/db/client";
 import { approvals, ledgerEvents, mandates, paymentMethods, payments } from "@/db/schema";
 import { paypalRequestId } from "@/lib/ledger/idempotency";
@@ -44,6 +44,13 @@ export const APPROVAL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 // A row still authorizing after this long was most likely interrupted; a retry may resume it, and
 // PayPal's request-id dedupe returns the same order instead of creating a second one.
 const STALE_AUTHORIZING_MS = 2 * 60 * 1000;
+
+// A capture or void claimed this long ago and never finished was interrupted (a crash, a network error after the
+// claim); the sweep resumes it with the same PayPal-Request-Id, so PayPal can't act twice.
+const STALE_CLAIM_MS = 2 * 60 * 1000;
+
+// After this many declined captures the hold is released, so its budget isn't locked until PayPal expires it.
+export const MAX_CAPTURE_ATTEMPTS = 3;
 
 const OPEN_HOLD = ["authorized", "pending_approval"] as const;
 
@@ -240,14 +247,18 @@ export class CaptureNotAllowedError extends Error {}
  * Captures a hold. Allowed only for an allowed payment, or a needs_approval payment the user approved,
  * with no anomaly flags, on a mandate that is still active.
  */
-export async function capturePayment(deps: PaymentDeps, paymentId: string): Promise<Payment> {
+export async function capturePayment(deps: PaymentDeps, paymentId: string, options: { resume?: boolean } = {}): Promise<Payment> {
   const now = nowOf(deps);
   const claim = await deps.db.transaction(async (tx) => {
     const current = await getPayment(tx, paymentId);
     const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, current.mandateId)).for("no key update");
     const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("no key update");
-    if (payment!.status !== "authorized") return { kind: "skip" as const, payment: payment! };
-    if (mandate!.status === "revoked") return { kind: "revoked" as const, payment: payment! };
+    const interrupted = options.resume && payment!.status === "capturing" && now.getTime() - payment!.updatedAt.getTime() > STALE_CLAIM_MS;
+    if (payment!.status !== "authorized" && !interrupted) return { kind: "skip" as const, payment: payment! };
+    if (mandate!.status === "revoked") {
+      if (interrupted) await tx.update(payments).set({ status: "authorized", updatedAt: now }).where(eq(payments.id, paymentId));
+      return { kind: "revoked" as const, payment: payment! };
+    }
     if (payment!.anomalyFlags.length) throw new CaptureNotAllowedError(`payment ${paymentId} has anomalies`);
     if (payment!.decision === "needs_approval") {
       const [approval] = await tx.select().from(approvals).where(eq(approvals.paymentId, paymentId));
@@ -273,16 +284,23 @@ export async function capturePayment(deps: PaymentDeps, paymentId: string): Prom
       requestId: paypalRequestId(payment.idempotencyKey, "capture"),
     });
   } catch (error) {
+    // Anything but a definite PayPal answer leaves the row capturing; the sweep resumes it (resumeStuckPayments).
     if (!(error instanceof PayPalError)) throw error;
-    return deps.db.transaction(async (tx) => {
+    const { back, failures } = await deps.db.transaction(async (tx) => {
       const [back] = await tx
         .update(payments)
         .set({ status: "authorized", updatedAt: nowOf(deps) })
         .where(and(eq(payments.id, paymentId), eq(payments.status, "capturing")))
         .returning();
       await logEvent(tx, payment, "capture.failed", nowOf(deps), { detail: paypalDetail(error) });
-      return back ?? getPayment(tx, paymentId);
+      const [row] = await tx
+        .select({ n: count() })
+        .from(ledgerEvents)
+        .where(and(eq(ledgerEvents.paymentId, paymentId), eq(ledgerEvents.type, "capture.failed")));
+      return { back: back ?? (await getPayment(tx, paymentId)), failures: row?.n ?? 0 };
     });
+    if (back.status === "authorized" && failures >= MAX_CAPTURE_ATTEMPTS) return voidPayment(deps, paymentId, "capture_failed");
+    return back;
   }
 
   return deps.db.transaction(async (tx) => {
@@ -303,20 +321,22 @@ export async function capturePayment(deps: PaymentDeps, paymentId: string): Prom
   });
 }
 
-export type VoidReason = "rejected" | "approval_expired" | "mandate_revoked";
+export type VoidReason = "rejected" | "approval_expired" | "mandate_revoked" | "capture_failed" | "resumed";
 
 /** Releases an open hold with the payee shop's credentials and gives the budget back. */
-export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: VoidReason): Promise<Payment> {
+export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: VoidReason, options: { resume?: boolean } = {}): Promise<Payment> {
   const now = nowOf(deps);
   const claim = await deps.db.transaction(async (tx) => {
     const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("no key update");
-    if (!payment || !(OPEN_HOLD as readonly string[]).includes(payment.status)) return null;
+    const interrupted = options.resume && payment?.status === "voiding" && now.getTime() - payment.updatedAt.getTime() > STALE_CLAIM_MS;
+    if (!payment || (!(OPEN_HOLD as readonly string[]).includes(payment.status) && !interrupted)) return null;
     const [claimed] = await tx
       .update(payments)
       .set({ status: "voiding", updatedAt: now })
       .where(eq(payments.id, paymentId))
       .returning();
-    return { payment: claimed!, previous: payment.status as (typeof OPEN_HOLD)[number] };
+    // An interrupted void stays claimed on failure, for the next sweep to try again.
+    return { payment: claimed!, previous: payment.status as (typeof OPEN_HOLD)[number] | "voiding" };
   });
   if (!claim) return getPayment(deps.db, paymentId);
   const { payment, previous } = claim;
@@ -357,6 +377,41 @@ export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: 
     });
     return voided;
   });
+}
+
+/**
+ * Picks up payments that stopped part-way and would otherwise hold their budget until PayPal expires the hold:
+ * a hold, capture or void interrupted after its claim, and a capture PayPal declined (retried, then released).
+ * Runs from the approval sweep, so page loads, agent calls and the cron all move them on.
+ */
+export async function resumeStuckPayments(deps: PaymentDeps, limit = 20): Promise<Payment[]> {
+  const before = new Date(nowOf(deps).getTime() - STALE_CLAIM_MS);
+  const stuck = await deps.db
+    .select()
+    .from(payments)
+    .where(
+      and(
+        lte(payments.updatedAt, before),
+        or(
+          inArray(payments.status, ["authorizing", "capturing", "voiding"]),
+          and(eq(payments.status, "authorized"), sql`cardinality(${payments.anomalyFlags}) = 0`),
+        ),
+      ),
+    )
+    .orderBy(payments.updatedAt)
+    .limit(limit);
+
+  const results: Payment[] = [];
+  for (const payment of stuck) {
+    try {
+      if (payment.status === "authorizing") results.push(await placeHold(deps, payment));
+      else if (payment.status === "voiding") results.push(await voidPayment(deps, payment.id, "resumed", { resume: true }));
+      else results.push(await capturePayment(deps, payment.id, { resume: true }));
+    } catch (error) {
+      console.warn(`resuming payment ${payment.id} failed:`, error instanceof Error ? error.message : error);
+    }
+  }
+  return results;
 }
 
 export type RevokeResult = { alreadyRevoked: boolean; voided: string[]; stillOpen: string[] };

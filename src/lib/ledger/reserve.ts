@@ -26,6 +26,12 @@ export type DecideResult = {
 
 export class MandateNotFoundError extends Error {}
 
+const RETRYABLE: Payment["status"][] = ["voided", "failed"];
+
+function attemptKey(base: string, attempt: number): string {
+  return attempt === 1 ? base : `${base}:${attempt}`;
+}
+
 /** Cents reserved or captured in each of the policy's budget windows: the same numbers the evaluator is given. */
 export async function spentByPeriod(tx: Db | Tx, mandateId: string, policy: Policy, runId: string | null, now: Date) {
   const spent: Partial<Record<BudgetPeriod, number>> = {};
@@ -33,7 +39,7 @@ export async function spentByPeriod(tx: Db | Tx, mandateId: string, policy: Poli
   for (const { period } of policy.budgets) {
     let scope;
     if (period === "run") {
-      // Ad-hoc requests have no run, so a per-run budget caps each one on its own.
+      // Only direct calls without a run (tests, scripts) get here with null; MCP requests carry mcpRunId.
       if (runId === null) {
         spent.run = 0;
         continue;
@@ -58,7 +64,7 @@ export async function spentByPeriod(tx: Db | Tx, mandateId: string, policy: Poli
  */
 export async function decideAndReserve(db: Db, input: DecideInput): Promise<DecideResult> {
   const now = input.now ?? new Date();
-  const key = cartIdempotencyKey({ mandateId: input.mandateId, cart: input.cart, runId: input.runId, now });
+  const base = cartIdempotencyKey({ mandateId: input.mandateId, cart: input.cart, runId: input.runId, now });
 
   return db.transaction(async (tx) => {
     // NO KEY UPDATE, never FOR UPDATE, on mandates and payments: these locks still exclude each other,
@@ -67,7 +73,15 @@ export async function decideAndReserve(db: Db, input: DecideInput): Promise<Deci
     const [mandate] = await tx.select().from(mandates).where(eq(mandates.id, input.mandateId)).for("no key update");
     if (!mandate) throw new MandateNotFoundError(input.mandateId);
 
-    const [existing] = await tx.select().from(payments).where(eq(payments.idempotencyKey, key));
+    // A cart whose hold was voided (rejected, expired, revoked) or never placed paid nothing, so sending it again
+    // is a new purchase; anything else under the same key is the same purchase and is replayed.
+    let key = base;
+    let existing: Payment | undefined;
+    for (let attempt = 1; ; attempt++) {
+      key = attemptKey(base, attempt);
+      [existing] = await tx.select().from(payments).where(eq(payments.idempotencyKey, key));
+      if (!existing || !RETRYABLE.includes(existing.status)) break;
+    }
     if (existing) {
       return {
         payment: existing,

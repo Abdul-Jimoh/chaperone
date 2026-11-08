@@ -4,7 +4,7 @@ import { errors as joseErrors, jwtVerify, SignJWT } from "jose";
 import { approvals, ledgerEvents, payments } from "@/db/schema";
 import type { Payment } from "@/lib/ledger/reserve";
 import { sha256Hex } from "@/lib/policy/canonical";
-import { capturePayment, voidPayment, type PaymentDeps } from "./service";
+import { capturePayment, resumeStuckPayments, voidPayment, type PaymentDeps } from "./service";
 
 export type ApprovalDeps = PaymentDeps & { approvalSecret: string };
 
@@ -128,7 +128,7 @@ export async function decideApproval(deps: ApprovalDeps, token: string, choice: 
 
 /**
  * Serverless has no timer, so timeouts are applied lazily: run this from page loads, API calls and a
- * cron. It also retries voids that failed after a reject or expiry.
+ * cron. It also retries voids that failed after a reject or expiry, and resumes stuck payments.
  */
 export async function sweepApprovals(deps: PaymentDeps): Promise<Payment[]> {
   const now = nowOf(deps);
@@ -167,5 +167,6 @@ export async function sweepApprovals(deps: PaymentDeps): Promise<Payment[]> {
     if (outcome === "approved") continue;
     results.push(await voidPayment(deps, payment.id, outcome === "rejected" ? "rejected" : "approval_expired"));
   }
+  results.push(...(await resumeStuckPayments(deps)));
   return results;
 }

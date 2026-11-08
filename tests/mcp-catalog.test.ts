@@ -101,6 +101,30 @@ describe("request_payment with catalog listings", () => {
     expect(await db.select().from(payments)).toEqual([]);
   });
 
+  it("won't take shipping or tax from an agent for a catalog shop", async () => {
+    const { deps, shopping } = setup();
+    const mandate = await seedLinkedMandate(db, policy);
+    const padded = await requestPaymentTool(deps, mandate.id, { items: [{ listing_id: "hb-dish-soap-750", quantity: 1 }], shipping_cents: 3_000 }, shopping);
+    expect(padded).toMatchObject({ error: "invalid_cart" });
+    expect(await requestPaymentTool(deps, mandate.id, { items: [{ listing_id: "hb-dish-soap-750", quantity: 1 }], tax_cents: 100 }, shopping)).toMatchObject({ error: "invalid_cart" });
+    expect(await db.select().from(payments)).toEqual([]);
+  });
+
+  it("counts everything MCP agents spend in a day against the per-run budget", async () => {
+    const { deps, shopping } = setup();
+    const clock = { now: new Date("2026-11-03T15:00:00Z") };
+    const timed = { ...deps, clock: () => clock.now };
+    const mandate = await seedLinkedMandate(db, policy);
+    const buy = (listing: string, quantity: number) => requestPaymentTool(timed, mandate.id, { items: [{ listing_id: listing, quantity }] }, shopping);
+    expect(await buy("pp-dry-dog-food-5kg", 2)).toMatchObject({ decision: "needs_approval" });
+    expect(await buy("pp-dry-dog-food-5kg", 1)).toMatchObject({ decision: "allow" });
+    expect(await buy("hb-paper-towels-12", 1)).toMatchObject({ decision: "deny", clause_id: "budget.run" });
+    expect((await checkMandate(timed, mandate.id, undefined, shopping)).budgets.find((b) => b.period === "run")).toMatchObject({ used_cents: 7_947 });
+
+    clock.now = new Date("2026-11-04T15:00:00Z");
+    expect(await buy("hb-paper-towels-12", 1)).toMatchObject({ decision: "allow" });
+  });
+
   it("ignores the category an agent claims for a shop outside the catalog, so the user is asked", async () => {
     const { deps, shopping } = setup();
     const outside = "OUTSIDESHOP01";

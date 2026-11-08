@@ -53,3 +53,9 @@ export function windowStart(period: BudgetPeriod, now: Date, timeZone: string): 
   const monday = new Date(Date.UTC(p.year, p.month - 1, p.day - back));
   return zonedMidnight(monday.getUTCFullYear(), monday.getUTCMonth() + 1, monday.getUTCDate(), timeZone);
 }
+
+/** The calendar date of `now` in the mandate's time zone, as YYYY-MM-DD. */
+export function localDate(now: Date, timeZone: string): string {
+  const p = zonedParts(now.getTime(), timeZone);
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+}

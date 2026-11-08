@@ -2,7 +2,7 @@ import { createPayPalClient } from "@/lib/paypal/client";
 import { createPayeeClients } from "@/lib/paypal/payees";
 
 type Auth = { id: string; status: string; amount: { currency_code: string; value: string }; payee: string };
-type Failure = { status: number; name: string; issue: string };
+type Failure = { status: number; name: string; issue: string } | "network";
 
 /**
  * Enough of the PayPal sandbox to run the payment service: orders with vault holds, capture by the
@@ -18,8 +18,11 @@ export function fakePayPal(shopApps: Record<string, string>) {
   let gate: Promise<void> | undefined;
   let onOrder: (() => void) | undefined;
 
-  const error = (f: Failure) =>
-    Response.json({ name: f.name, details: [{ issue: f.issue }], debug_id: "dbg" }, { status: f.status });
+  const error = (f: Failure) => {
+    // The connection drops after PayPal may already have acted: the caller can't tell which.
+    if (f === "network") throw new TypeError("fetch failed");
+    return Response.json({ name: f.name, details: [{ issue: f.issue }], debug_id: "dbg" }, { status: f.status });
+  };
 
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
