@@ -1,8 +1,18 @@
 "use client";
 
-import { AllCommunityModule, ModuleRegistry, themeQuartz, type ColDef, type ICellRendererParams } from "ag-grid-community";
+import {
+  AllCommunityModule,
+  ModuleRegistry,
+  themeQuartz,
+  type ColDef,
+  type ICellRendererParams,
+  type IRowNode,
+  type PostSortRowsParams,
+  type RowClassParams,
+  type RowHeightParams,
+} from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { decisionLabel, StatusPill } from "./ui";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -17,10 +27,23 @@ export type LedgerRow = {
   rule: string;
   status: string;
   source: string;
+  mandateId: string;
   mandateHash: string;
+  mandateLabel: string;
+  /** The budget window the payment counts against, e.g. "November 2026", and that window's limit. */
+  window: string;
+  windowLimitCents: number | null;
   anomalies: string[];
   events: { at: string; type: string; amountCents: number | null; detail: string }[];
 };
+
+type GroupBy = "none" | "shop" | "window" | "decision" | "mandate";
+
+// Full-width rows are how Community AG Grid shows group headers and per-order detail without the Enterprise modules.
+type GridRow =
+  | ({ kind: "payment"; group: string } & LedgerRow)
+  | { kind: "group"; id: string; group: string; title: string; count: number; paidCents: number; heldCents: number; limitCents: number | null; open: boolean }
+  | { kind: "detail"; id: string; group: string; parent: LedgerRow };
 
 const theme = themeQuartz.withParams({
   fontFamily: "inherit",
@@ -36,10 +59,29 @@ const theme = themeQuartz.withParams({
   headerFontWeight: 500,
   wrapperBorderRadius: 16,
   fontSize: 14,
+  rowHeight: 48,
 });
 
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+
+const PAID = new Set(["captured"]);
+const HELD = new Set(["authorizing", "authorized", "pending_approval", "capturing"]);
+
+const GROUPS: { id: GroupBy; label: string }[] = [
+  { id: "none", label: "No grouping" },
+  { id: "shop", label: "Shop" },
+  { id: "window", label: "Budget window" },
+  { id: "decision", label: "Decision" },
+  { id: "mandate", label: "Signed rules" },
+];
+
+const FLAG_LABEL: Record<string, string> = {
+  payee_mismatch: "PayPal paid a different shop",
+  payee_missing: "PayPal didn't report the shop",
+  amount_mismatch: "Held amount differs",
+  capture_failed: "Capture kept failing",
+};
 
 const EVENT_LABEL: Record<string, string> = {
   "decision.allow": "Evaluator: allowed",
@@ -58,79 +100,271 @@ const EVENT_LABEL: Record<string, string> = {
   anomaly: "Anomaly flagged",
 };
 
-export function LedgerGrid({ rows }: { rows: LedgerRow[] }) {
-  const [selected, setSelected] = useState<LedgerRow | null>(null);
+function groupKey(row: LedgerRow, by: GroupBy): string {
+  if (by === "shop") return row.shop;
+  if (by === "window") return row.window;
+  if (by === "decision") return decisionLabel(row.decision);
+  if (by === "mandate") return row.mandateLabel;
+  return "";
+}
 
-  const columns = useMemo<ColDef<LedgerRow>[]>(
+function buildRows(rows: LedgerRow[], by: GroupBy, closed: Set<string>, expanded: Set<string>): GridRow[] {
+  const out: GridRow[] = [];
+  const push = (row: LedgerRow, group: string) => {
+    out.push({ kind: "payment", group, ...row });
+    if (expanded.has(row.id)) out.push({ kind: "detail", id: `detail:${row.id}`, group, parent: row });
+  };
+  if (by === "none") {
+    rows.forEach((r) => push(r, ""));
+    return out;
+  }
+  const groups = new Map<string, LedgerRow[]>();
+  for (const r of rows) groups.set(groupKey(r, by), [...(groups.get(groupKey(r, by)) ?? []), r]);
+  for (const [title, members] of groups) {
+    const open = !closed.has(title);
+    out.push({
+      kind: "group",
+      id: `group:${title}`,
+      group: title,
+      title,
+      count: members.length,
+      paidCents: members.filter((m) => PAID.has(m.status)).reduce((s, m) => s + m.totalCents, 0),
+      heldCents: members.filter((m) => HELD.has(m.status)).reduce((s, m) => s + m.totalCents, 0),
+      limitCents: by === "window" ? members[0]!.windowLimitCents : null,
+      open,
+    });
+    if (open) members.forEach((m) => push(m, title));
+  }
+  return out;
+}
+
+export function LedgerGrid({ rows }: { rows: LedgerRow[] }) {
+  const [by, setBy] = useState<GroupBy>("none");
+  const [closed, setClosed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+
+  const toggle = (set: Set<string>, key: string) => {
+    const next = new Set(set);
+    if (!next.delete(key)) next.add(key);
+    return next;
+  };
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => [r.shop, r.items, r.rule, decisionLabel(r.decision), r.status, r.window, r.mandateHash, ...r.anomalies].join(" ").toLowerCase().includes(q));
+  }, [rows, search]);
+  const gridRows = useMemo(() => buildRows(visible, by, closed, expanded), [visible, by, closed, expanded]);
+
+  const columns = useMemo<ColDef<GridRow>[]>(
     () => [
+      {
+        colId: "open",
+        headerName: "",
+        width: 52,
+        sortable: false,
+        resizable: false,
+        cellRenderer: (p: ICellRendererParams<GridRow>) =>
+          p.data?.kind === "payment" && !p.node.rowPinned ? (
+            <span className="flex h-full items-center text-ink-2" aria-hidden>
+              <Chevron open={expanded.has(p.data.id)} />
+            </span>
+          ) : null,
+      },
       { field: "at", headerName: "When (UTC)", valueFormatter: (p) => (p.value ? when(p.value) : ""), width: 150, sort: "desc" },
-      { field: "shop", headerName: "Shop", width: 150 },
+      { field: "shop", headerName: "Shop", width: 140 },
       { field: "items", headerName: "Items", flex: 1, minWidth: 220 },
       { field: "totalCents", headerName: "Total", valueFormatter: (p) => (p.value == null ? "" : money(p.value)), width: 110, type: "rightAligned" },
       { field: "decision", headerName: "Decision", valueFormatter: (p) => (p.value ? decisionLabel(p.value) : ""), width: 120 },
       {
         field: "status",
         headerName: "Status",
-        width: 160,
-        cellRenderer: (p: ICellRendererParams<LedgerRow>) =>
-          p.data && !p.node.rowPinned ? (
+        width: 150,
+        cellRenderer: (p: ICellRendererParams<GridRow>) =>
+          p.data?.kind === "payment" && !p.node.rowPinned ? (
             <span className="flex h-full items-center">
-              <StatusPill status={p.value} />
+              <StatusPill status={p.data.status} />
+            </span>
+          ) : null,
+      },
+      {
+        field: "anomalies",
+        headerName: "Flags",
+        width: 130,
+        sortable: false,
+        cellRenderer: (p: ICellRendererParams<GridRow>) =>
+          p.data?.kind === "payment" && !p.node.rowPinned && p.data.anomalies.length ? (
+            <span className="flex h-full items-center">
+              <span className="rounded-full bg-accent px-2.5 py-1 text-[0.78rem] leading-4 font-medium text-paper">{p.data.anomalies.length === 1 ? "1 flag" : `${p.data.anomalies.length} flags`}</span>
             </span>
           ) : null,
       },
       { field: "rule", headerName: "Rule that decided", flex: 1, minWidth: 220 },
+      { field: "window", headerName: "Budget window", width: 150 },
       { field: "source", headerName: "From", width: 90, valueFormatter: (p) => (p.value === "mcp" ? "MCP" : p.value === "agent" ? "Agent" : "") },
       { field: "mandateHash", headerName: "Mandate hash", width: 140, valueFormatter: (p) => (p.value ? `${p.value.slice(0, 10)}…` : "") },
-      { field: "anomalies", headerName: "Flags", width: 120, valueFormatter: (p) => (p.value?.length ? p.value.join(", ") : "") },
     ],
-    [],
+    [expanded],
   );
 
-  const paid = rows.filter((r) => r.status === "captured").reduce((sum, r) => sum + r.totalCents, 0);
-  const pinned = useMemo(() => [{ shop: "Paid in total", totalCents: paid } as LedgerRow], [paid]);
+  const totals = useMemo(() => {
+    const sum = (set: Set<string>) => visible.filter((r) => set.has(r.status)).reduce((s, r) => s + r.totalCents, 0);
+    const blocked = visible.filter((r) => r.decision === "deny").reduce((s, r) => s + r.totalCents, 0);
+    return [
+      { kind: "payment", id: "total-paid", shop: "Paid", items: "Captured by the shops", totalCents: sum(PAID) },
+      { kind: "payment", id: "total-held", shop: "On hold", items: "Held in PayPal", totalCents: sum(HELD) },
+      { kind: "payment", id: "total-blocked", shop: "Blocked", items: "Denied, never charged", totalCents: blocked },
+    ] as GridRow[];
+  }, [visible]);
+
+  // AG Grid sorts every row it holds; this puts each group's header first and each detail row right under its payment.
+  const postSortRows = useCallback(({ nodes }: PostSortRowsParams<GridRow>) => {
+    const order: IRowNode<GridRow>[] = [];
+    const headers = nodes.filter((n) => n.data?.kind === "group");
+    const details = new Map(nodes.filter((n) => n.data?.kind === "detail").map((n) => [(n.data as { parent: LedgerRow }).parent.id, n]));
+    const sorted = nodes.filter((n) => n.data?.kind === "payment");
+    const place = (group: string) =>
+      sorted
+        .filter((n) => n.data!.group === group)
+        .forEach((n) => {
+          order.push(n);
+          const detail = details.get(n.data!.id);
+          if (detail) order.push(detail);
+        });
+    if (headers.length) headers.forEach((h) => (order.push(h), place(h.data!.group)));
+    else place("");
+    nodes.splice(0, nodes.length, ...order);
+  }, []);
+
+  const height = (rowCount: number) => (rowCount > 14 ? "h-160" : "");
 
   return (
     <div className="grid gap-4">
-      <div className={`min-w-0 ${rows.length > 12 ? "h-136" : ""}`}>
-        <AgGridReact<LedgerRow>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="group" aria-label="Group payments by" className="flex flex-wrap gap-1.5">
+          {GROUPS.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              aria-pressed={by === g.id}
+              onClick={() => {
+                setBy(g.id);
+                setClosed(new Set());
+              }}
+              className={`h-9 rounded-full border px-3.5 text-[0.9rem] font-medium ${by === g.id ? "border-ink bg-ink text-paper" : "border-line-strong hover:border-ink"}`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+        <label className="flex h-9 w-full items-center gap-2 rounded-full border border-line-strong px-3.5 sm:w-64">
+          <span className="sr-only">Search payments</span>
+          <svg viewBox="0 0 20 20" className="size-4 shrink-0 text-ink-2" aria-hidden>
+            <circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M13.2 13.2 17 17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search shop, item, rule, flag" className="w-full bg-transparent text-[0.9rem] focus:outline-none" />
+        </label>
+      </div>
+
+      <div className={`min-w-0 ${height(gridRows.length)}`}>
+        <AgGridReact<GridRow>
           theme={theme}
-          rowData={rows}
-          domLayout={rows.length > 12 ? "normal" : "autoHeight"}
+          rowData={gridRows}
+          getRowId={(p) => p.data.id}
+          domLayout={gridRows.length > 14 ? "normal" : "autoHeight"}
           rowHeight={48}
           columnDefs={columns}
-          pinnedBottomRowData={pinned}
-          defaultColDef={{ sortable: true, resizable: true, filter: true }}
-          rowSelection={{ mode: "singleRow", checkboxes: false, enableClickSelection: true }}
-          onRowClicked={(e) => !e.node.rowPinned && e.data && setSelected(e.data)}
-          overlayNoRowsTemplate="No payments yet. Send the agent shopping from the Shop page."
+          pinnedBottomRowData={totals}
+          defaultColDef={{ sortable: true, resizable: true }}
+          postSortRows={postSortRows}
+          isFullWidthRow={({ rowNode }) => rowNode.data?.kind === "group" || rowNode.data?.kind === "detail"}
+          fullWidthCellRenderer={(p: ICellRendererParams<GridRow>) =>
+            p.data?.kind === "group" ? (
+              <GroupHeader row={p.data} onToggle={() => setClosed((s) => toggle(s, (p.data as { group: string }).group))} />
+            ) : p.data?.kind === "detail" ? (
+              <Detail row={p.data.parent} />
+            ) : null
+          }
+          getRowHeight={({ data }: RowHeightParams<GridRow>) => (data?.kind === "detail" ? 64 + Math.ceil(data.parent.events.length / 3) * 56 + (data.parent.anomalies.length ? 30 : 0) : data?.kind === "group" ? 52 : 48)}
+          getRowClass={({ data, node }: RowClassParams<GridRow>) => (node.rowPinned ? "font-semibold" : data?.kind === "payment" ? "cursor-pointer" : "")}
+          suppressCellFocus
+          onRowClicked={(e) => {
+            if (e.node.rowPinned || e.data?.kind !== "payment") return;
+            const id = e.data.id;
+            setExpanded((s) => toggle(s, id));
+          }}
+          overlayNoRowsTemplate={search ? "No payment matches that search." : "No payments yet. Send the agent shopping from the Shop page."}
         />
       </div>
-      <aside className="rounded-[1.4rem] border border-line-strong p-5" aria-live="polite">
-        {selected ? (
-          <>
-            <p className="label text-ink-2">Payment trail</p>
-            <p className="mt-2 text-[1.2rem] font-semibold tracking-[-0.02em]">
-              {selected.shop} · {money(selected.totalCents)}
-            </p>
-            <ol className="mt-4 space-y-3 border-l border-line-strong pl-4">
-              {selected.events.map((e, i) => (
-                <li key={i}>
-                  <p className="font-medium">{EVENT_LABEL[e.type] ?? e.type}</p>
-                  <p className="text-[0.85rem] text-ink-2">
-                    {when(e.at)}
-                    {e.amountCents != null ? ` · ${money(e.amountCents)}` : ""}
-                  </p>
-                  {e.detail && <p className="mt-0.5 font-mono text-[0.72rem] break-all text-ink-3">{e.detail}</p>}
-                </li>
-              ))}
-            </ol>
-            <p className="mt-4 font-mono text-[0.72rem] break-all text-ink-3">mandate sha256 {selected.mandateHash}</p>
-          </>
-        ) : (
-          <p className="text-ink-2">Select a payment to see every step: the decision, the PayPal hold, your answer, and the capture or void.</p>
+      <p className="text-[0.88rem] text-ink-2">Click a payment for its full trail: the decision, the PayPal hold, your answer, and the capture or void.</p>
+    </div>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" className={`size-4 transition-transform ${open ? "rotate-90" : ""}`}>
+      <path d="m7.5 5 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function GroupHeader({ row, onToggle }: { row: Extract<GridRow, { kind: "group" }>; onToggle: () => void }) {
+  return (
+    <button type="button" onClick={onToggle} aria-expanded={row.open} className="flex size-full items-center gap-3 bg-paper-2 px-4 text-left">
+      <Chevron open={row.open} />
+      <span className="font-semibold tracking-[-0.01em]">{row.title}</span>
+      <span className="text-[0.88rem] text-ink-2">{row.count === 1 ? "1 payment" : `${row.count} payments`}</span>
+      <span className="ml-auto flex items-center gap-4 text-[0.88rem]">
+        <span>
+          <span className="text-ink-2">Paid </span>
+          <span className="font-medium">{money(row.paidCents)}</span>
+        </span>
+        {row.heldCents > 0 && (
+          <span>
+            <span className="text-ink-2">Held </span>
+            <span className="font-medium">{money(row.heldCents)}</span>
+          </span>
         )}
-      </aside>
+        {row.limitCents !== null && (
+          <span className="hidden items-center gap-2 sm:flex">
+            <span className="text-ink-2">of {money(row.limitCents)}</span>
+            <span className="h-1.5 w-24 overflow-hidden rounded-full bg-paper-3">
+              <span className="block h-full bg-ink" style={{ width: `${Math.min(100, ((row.paidCents + row.heldCents) / row.limitCents) * 100)}%` }} />
+            </span>
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+function Detail({ row }: { row: LedgerRow }) {
+  return (
+    <div className="size-full overflow-hidden border-y border-line bg-paper-2 px-6 py-4 whitespace-normal">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="font-semibold tracking-[-0.01em]">
+          {row.shop} · {money(row.totalCents)} · {row.items}
+        </p>
+        <p className="font-mono text-[0.72rem] text-ink-3">mandate sha256 {row.mandateHash.slice(0, 24)}…</p>
+      </div>
+      {row.anomalies.length > 0 && (
+        <p className="mt-2 text-[0.9rem] font-medium text-accent-ink">Flagged, so never captured: {row.anomalies.map((a) => FLAG_LABEL[a] ?? a).join("; ")}.</p>
+      )}
+      <ol className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-3">
+        {row.events.map((e, i) => (
+          <li key={i} className="border-l-2 border-line-strong pl-3">
+            <p className="text-[0.9rem] leading-5 font-medium">{EVENT_LABEL[e.type] ?? e.type}</p>
+            <p className="text-[0.8rem] leading-5 text-ink-2">
+              {when(e.at)}
+              {e.amountCents != null ? ` · ${money(e.amountCents)}` : ""}
+            </p>
+            {e.detail && <p className="truncate font-mono text-[0.7rem] leading-4 text-ink-3">{e.detail}</p>}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
