@@ -5,6 +5,7 @@ import { approvalLinkFor, NotYoursError } from "@/lib/app/demo";
 import { decideApproval, issueApprovalLink, sweepApprovals, type ApprovalDeps } from "@/lib/payments/approvals";
 import { capturePayment, MAX_CAPTURE_ATTEMPTS, requestPayment, resumeStuckPayments, revokeMandate, type PaymentResult } from "@/lib/payments/service";
 import { checkMandate } from "@/mcp/tools";
+import { UnknownPayeeError } from "@/lib/paypal/payees";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, seedLinkedMandate, testDb } from "./support/db";
 import { cart, SHOP_A, SHOP_B, samplePolicy } from "./support/fixtures";
@@ -485,6 +486,32 @@ describe("an outage is ridden out, on every path", () => {
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row!.status).toBe("voided");
     expect(await reservation(payment.id)).toBe("released");
+  });
+
+  it("a hold PayPal refused to release five times still gives its budget back when PayPal expires it", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const { payment } = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: bigCart() }));
+    paypal.fail.void = { status: 403, name: "PERMISSION_DENIED", issue: "PERMISSION_DENIED" };
+    await revokeMandate(deps, mandate.id);
+    await minuteSweeps(deps, advance, 60);
+    expect(paypal.calls.filter((c) => c.op === "void").length).toBeLessThanOrEqual(5);
+    paypal.auths.get(payment.paypalAuthorizationId!)!.status = "EXPIRED";
+    advance(7 * 60);
+    await sweepApprovals(deps);
+    expect((await db.select().from(payments).where(eq(payments.id, payment.id)))[0]!.status).toBe("voided");
+    expect(await reservation(payment.id)).toBe("released");
+  });
+
+  it("a void Chaperone can't send (no credentials for the shop) counts as refused, not as an outage", async () => {
+    const { paypal, deps } = setup();
+    const { link, payment } = await approved(deps);
+    const noShopApp: ApprovalDeps = { ...deps, payees: { ...deps.payees, forPayee: () => { throw new UnknownPayeeError("no credentials"); } } as typeof deps.payees };
+    await decideApproval(noShopApp, link.token, "reject");
+    const types = (await db.select().from(ledgerEvents).where(eq(ledgerEvents.paymentId, payment.id))).map((e) => e.type);
+    expect(types).toContain("void.failed");
+    expect(types).not.toContain("void.unanswered");
+    void paypal;
   });
 
   it("a row with a very long history of unanswered tries can't break the retry queue", async () => {

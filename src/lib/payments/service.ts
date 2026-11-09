@@ -6,7 +6,7 @@ import { decideAndReserve, releaseReservation, settleReservation, type Payment }
 import { PayPalError, type PayPalClient } from "@/lib/paypal/client";
 import { money, toCents } from "@/lib/paypal/money";
 import { createAuthorizeOrder, firstAuthorization, getOrder } from "@/lib/paypal/orders";
-import { voidHold, type PayeeClients } from "@/lib/paypal/payees";
+import { PayeeMismatchError, UnknownPayeeError, voidHold, type PayeeClients } from "@/lib/paypal/payees";
 import { captureAuthorization, getAuthorization, type Capture } from "@/lib/paypal/payments";
 import type { Evaluation } from "@/lib/policy/evaluate";
 import { cartSchema } from "@/lib/policy/schema";
@@ -412,7 +412,8 @@ export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: 
         .where(and(eq(payments.id, paymentId), eq(payments.status, "voiding")))
         .returning();
       // Only a definite refusal (4xx) counts towards MAX_VOID_ATTEMPTS; no answer (an outage) is retried with the backoff.
-      const refused = error instanceof PayPalError && error.status < 500;
+      // A payee mismatch or missing shop credentials won't fix itself either, so they count as refusals.
+      const refused = (error instanceof PayPalError && error.status < 500) || error instanceof PayeeMismatchError || error instanceof UnknownPayeeError;
       await logEvent(tx, payment, refused ? "void.failed" : "void.unanswered", nowOf(deps), { detail: { reason, ...paypalDetail(error) } });
       return back ?? getPayment(tx, paymentId);
     });
@@ -436,16 +437,6 @@ export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: 
   });
 }
 
-/**
- * Picks up payments that stopped part-way and would otherwise hold their budget until PayPal expires the hold:
- * a hold, capture or void interrupted after its claim, and a capture PayPal declined (retried, then released).
- * Unscoped, it runs from the cron and at most once a minute from a page load; scoped to a mandate, from that mandate's
- * own agent and shopper calls, so nobody's call does PayPal work for someone else.
- * No answer from PayPal is retried with growing gaps (2, 4, 8 minutes … up to six hours), so an outage resolves on its
- * own; definite refusals are bounded: captures stop after MAX_CAPTURE_ATTEMPTS declines (then the hold is released) and
- * voids after MAX_VOID_ATTEMPTS refusals, after which PayPal's own expiry of the hold releases it (the VOIDED webhook).
- * A row waiting out its gap or past a limit isn't picked, so it can't crowd out the others. Each failure is in the ledger.
- */
 const eventCount = (types: string[]) =>
   sql`(select count(*) from ${ledgerEvents} where ${ledgerEvents.paymentId} = ${payments.id} and ${ledgerEvents.type} in (${sql.join(
     types.map((t) => sql`${t}`),
@@ -461,7 +452,7 @@ export function waitedOutBackoff(now: Date) {
   return sql`${payments.updatedAt} <= ${now.toISOString()}::timestamptz - least(${BACKOFF_BASE_MINUTES} * power(2, least(${unanswered}, 10)), ${BACKOFF_MAX_MINUTES}) * interval '1 minute'`;
 }
 
-/** PayPal ended the hold itself (voided or expired it): nothing will be captured, so the budget comes back. */
+/** PayPal ended the hold itself (voided, expired or denied it): nothing will be captured, so the budget comes back. */
 async function recordReleasedByPayPal(deps: PaymentDeps, payment: Payment, paypalStatus: string): Promise<Payment> {
   return deps.db.transaction(async (tx) => {
     const done = nowOf(deps);
@@ -481,9 +472,22 @@ async function recordReleasedByPayPal(deps: PaymentDeps, payment: Payment, paypa
   });
 }
 
+/**
+ * Picks up payments that stopped part-way and would otherwise hold their budget until PayPal expires the hold:
+ * a hold, capture or void interrupted after its claim, and a capture PayPal declined (retried, then released).
+ * Unscoped, it runs from the cron and at most once a minute from a page load; scoped to a mandate, from that mandate's
+ * own agent and shopper calls, so nobody's call does PayPal work for someone else.
+ * No answer from PayPal is retried with growing gaps (2, 4, 8 minutes … up to six hours), so an outage resolves on its
+ * own; definite refusals are bounded: captures stop after MAX_CAPTURE_ATTEMPTS declines (then the hold is released) and
+ * voids after MAX_VOID_ATTEMPTS refusals. A hold past that limit is only looked up at PayPal every six hours, so when
+ * PayPal expires it the budget comes back, webhook or not. A row waiting out its gap isn't picked, so it can't crowd
+ * out the others. Each failure is in the ledger.
+ */
 export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?: string; limit?: number } = {}): Promise<Payment[]> {
   const before = new Date(nowOf(deps).getTime() - STALE_CLAIM_MS);
   const voidsRefused = eventCount(["void.failed"]);
+  // Past the void limit, a hold is still looked up at PayPal this often, to notice PayPal expiring it.
+  const sixHoursAgo = new Date(nowOf(deps).getTime() - BACKOFF_MAX_MINUTES * 60_000);
   const stuck = await deps.db
     .select()
     .from(payments)
@@ -495,10 +499,21 @@ export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?
         waitedOutBackoff(nowOf(deps)),
         or(
           inArray(payments.status, ["authorizing", "capturing"]),
-          and(eq(payments.status, "voiding"), sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`),
+          and(eq(payments.status, "voiding"), or(sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`, lte(payments.updatedAt, sixHoursAgo))),
+          // Waiting for an answer is the user's business, unless releasing it was already tried (a reject, expiry or
+          // revoke whose void PayPal refused): then it is retried like any release, and past the limit only looked up.
+          and(
+            eq(payments.status, "pending_approval"),
+            sql`${voidsRefused} >= 1`,
+            or(sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`, lte(payments.updatedAt, sixHoursAgo)),
+          ),
           // Every way on from authorized can end in a void (revoked, or declined too often), so once voids are capped
           // the row is left for PayPal to release when the authorization expires.
-          and(eq(payments.status, "authorized"), sql`cardinality(${payments.anomalyFlags}) = 0`, sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`),
+          and(
+            eq(payments.status, "authorized"),
+            sql`cardinality(${payments.anomalyFlags}) = 0`,
+            or(sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`, lte(payments.updatedAt, sixHoursAgo)),
+          ),
         ),
       ),
     )
@@ -513,8 +528,9 @@ export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?
         // The hold exists: PayPal's own record decides what happens next. The money may have moved already (an answer
         // lost, a capture made elsewhere), or PayPal may have ended the hold itself (voided, or expired after 29 days).
         const auth = await getAuthorization(deps.platform, payment.paypalAuthorizationId!);
-        if (["VOIDED", "EXPIRED"].includes(auth.status)) results.push(await recordReleasedByPayPal(deps, payment, auth.status));
+        if (["VOIDED", "EXPIRED", "DENIED"].includes(auth.status)) results.push(await recordReleasedByPayPal(deps, payment, auth.status));
         else if (payment.status === "voiding") results.push(await voidPayment(deps, payment.id, "resumed", { resume: true }));
+        else if (payment.status === "pending_approval") results.push(await voidPayment(deps, payment.id, "resumed"));
         else {
           const captured = ["CAPTURED", "PARTIALLY_CAPTURED"].includes(auth.status);
           results.push(await capturePayment(deps, payment.id, { resume: true, captured }));
