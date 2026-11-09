@@ -267,7 +267,7 @@ describe("recovery stays bounded", () => {
     expect(paypal.calls.filter((c) => c.op === "void")).toHaveLength(5);
   });
 
-  it("stops resuming a hold that keeps failing after five tries", async () => {
+  it("retries a hold PayPal doesn't answer less and less often, and it goes through once PayPal is back", async () => {
     const { paypal, deps, advance } = setup();
     const mandate = await seedLinkedMandate(db, samplePolicy());
     paypal.fail.order = "network";
@@ -276,7 +276,12 @@ describe("recovery stays bounded", () => {
       advance(3);
       await sweepApprovals(deps);
     }
-    expect(paypal.calls.filter((c) => c.op === "order")).toHaveLength(1 + 5);
+    // 30 minutes of outage: tried after 2, 4, 8 and 16 minute gaps, not on every sweep.
+    expect(paypal.calls.filter((c) => c.op === "order").length).toBeLessThanOrEqual(1 + 4);
+    delete paypal.fail.order;
+    advance(6 * 60);
+    await sweepApprovals(deps);
+    expect((await db.select().from(payments))[0]!.status).toBe("captured");
   });
 
   it("one agent's call doesn't resume other shoppers' stuck payments; the cron's sweep does", async () => {
@@ -311,7 +316,7 @@ describe("recovery stays bounded, whatever PayPal answers", () => {
     const first = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
     expect(first.payment.status).toBe("capturing");
     delete paypal.fail.capture;
-    await sweeps(deps, advance, 1);
+    await sweeps(deps, advance, 2);
     const [row] = await db.select().from(payments);
     expect(row!.status).toBe("captured");
     const types = (await db.select().from(ledgerEvents).where(eq(ledgerEvents.paymentId, row!.id))).map((e) => e.type);
@@ -348,13 +353,17 @@ describe("recovery stays bounded, whatever PayPal answers", () => {
     expect(paypal.calls.filter((c) => c.op === "void").length).toBeLessThanOrEqual(5);
   });
 
-  it("a capture PayPal never answers stops after five tries", async () => {
+  it("a capture PayPal doesn't answer is tried less and less often, and recorded once PayPal is back", async () => {
     const { paypal, deps, advance } = setup();
     const mandate = await seedLinkedMandate(db, samplePolicy());
     paypal.fail.capture = UNAVAILABLE;
     ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
     await sweeps(deps, advance, 30);
-    expect(paypal.calls.filter((c) => c.op === "capture").length).toBeLessThanOrEqual(1 + 5);
+    expect(paypal.calls.filter((c) => c.op === "capture").length).toBeLessThanOrEqual(1 + 6);
+    delete paypal.fail.capture;
+    advance(6 * 60);
+    await sweepApprovals(deps);
+    expect((await db.select().from(payments))[0]!.status).toBe("captured");
   });
 
   it("rows past their limit don't crowd out the others", async () => {

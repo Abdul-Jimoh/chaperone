@@ -51,7 +51,8 @@ const STALE_CLAIM_MS = 2 * 60 * 1000;
 
 // After this many declined captures the hold is released, so its budget isn't locked until PayPal expires it.
 export const MAX_CAPTURE_ATTEMPTS = 3;
-export const MAX_RESUME_ATTEMPTS = 5;
+const BACKOFF_BASE_MINUTES = 2;
+const BACKOFF_MAX_MINUTES = 6 * 60;
 export const MAX_VOID_ATTEMPTS = 5;
 
 const OPEN_HOLD = ["authorized", "pending_approval"] as const;
@@ -438,9 +439,10 @@ export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: 
  * a hold, capture or void interrupted after its claim, and a capture PayPal declined (retried, then released).
  * Unscoped, it runs from the cron and at most once a minute from a page load; scoped to a mandate, from that mandate's
  * own agent and shopper calls, so nobody's call does PayPal work for someone else.
- * Every path is bounded, and a row past its limit is no longer picked, so it can't crowd out the others: holds and
- * captures stop after MAX_RESUME_ATTEMPTS failed resumes (no answer from PayPal), captures after MAX_CAPTURE_ATTEMPTS
- * declines (then the hold is released), voids after MAX_VOID_ATTEMPTS refusals. Each failure is in the ledger.
+ * No answer from PayPal is retried with growing gaps (2, 4, 8 minutes … up to six hours), so an outage resolves on its
+ * own; definite refusals are bounded: captures stop after MAX_CAPTURE_ATTEMPTS declines (then the hold is released) and
+ * voids after MAX_VOID_ATTEMPTS refusals, after which PayPal's own expiry of the hold releases it (the VOIDED webhook).
+ * A row waiting out its gap or past a limit isn't picked, so it can't crowd out the others. Each failure is in the ledger.
  */
 export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?: string; limit?: number } = {}): Promise<Payment[]> {
   const before = new Date(nowOf(deps).getTime() - STALE_CLAIM_MS);
@@ -458,7 +460,9 @@ export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?
       and(
         lte(payments.updatedAt, before),
         scope.mandateId ? eq(payments.mandateId, scope.mandateId) : undefined,
-        sql`${unanswered} < ${MAX_RESUME_ATTEMPTS}`,
+        // No answer from PayPal (an outage): never given up, but tried less and less often, 2 minutes after the first
+        // failure, then 4, 8, … up to every six hours, so a payment caught in an outage recovers on its own.
+        sql`${payments.updatedAt} <= ${nowOf(deps).toISOString()}::timestamptz - least(${BACKOFF_BASE_MINUTES} * power(2, ${unanswered}), ${BACKOFF_MAX_MINUTES}) * interval '1 minute'`,
         or(
           inArray(payments.status, ["authorizing", "capturing"]),
           and(eq(payments.status, "voiding"), sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`),

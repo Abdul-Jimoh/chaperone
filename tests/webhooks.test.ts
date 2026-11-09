@@ -125,6 +125,20 @@ describe("applyWebhookEvent", () => {
     expect((await db.select().from(reservations))[0]!.status).toBe("released");
   });
 
+  it("frees the budget of a hold whose capture never got an answer, when PayPal voids it", async () => {
+    const payment = await heldPayment({ failCapture: true });
+    await db.update(payments).set({ status: "capturing" }).where(eq(payments.id, payment.id));
+    const voided = {
+      id: "WH-3",
+      event_type: "PAYMENT.AUTHORIZATION.VOIDED",
+      resource: { id: payment.paypalAuthorizationId!, status: "VOIDED", custom_id: payment.id },
+    };
+    expect(await applyWebhookEvent(db, voided, now)).toBe("applied");
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row!.status).toBe("voided");
+    expect((await db.select().from(reservations))[0]!.status).toBe("released");
+  });
+
   it("flags a capture that didn't come through the payment service", async () => {
     const payment = await heldPayment({ failCapture: true });
     expect(payment.status).toBe("authorized");

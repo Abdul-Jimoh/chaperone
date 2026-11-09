@@ -68,8 +68,9 @@ export async function applyWebhookEvent(db: Db, event: WebhookEvent, now = new D
 
       switch (event.event_type) {
         case "PAYMENT.AUTHORIZATION.VOIDED":
-          // Covers voids we didn't send ourselves too, e.g. PayPal expiring the hold after 29 days.
-          if (["authorizing", "authorized", "pending_approval", "voiding"].includes(payment.status)) {
+          // Covers voids we didn't send ourselves too, e.g. PayPal expiring the hold after 29 days, including a hold
+          // whose capture never got an answer: PayPal voiding it means it was never captured.
+          if (["authorizing", "authorized", "pending_approval", "capturing", "voiding"].includes(payment.status)) {
             update.status = "voided";
             await releaseReservation(tx, payment.id, now);
           }
