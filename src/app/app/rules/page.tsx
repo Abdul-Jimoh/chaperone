@@ -31,6 +31,8 @@ export default async function RulesPage() {
   const active = mandate.status === "active";
   // A trip is a run of the in-app agent, or a day an MCP agent bought something (D27).
   const lastTrip = recent.find((p) => p.runId?.startsWith("agent-") || p.source === "mcp")?.createdAt;
+  // After a revoke, a hold PayPal wouldn't release stays open until its authorization expires; say so.
+  const stillHeld = active ? [] : recent.filter((p) => ["authorizing", "authorized", "pending_approval", "capturing", "voiding"].includes(p.status));
   const due = lastTrip && policy.schedule ? nextTrip(lastTrip, policy.schedule) : null;
 
   return (
@@ -47,6 +49,16 @@ export default async function RulesPage() {
         You wrote them in plain English, Claude turned them into these rules, and you confirmed them before they were signed. Claude never decides a payment: plain code
         checks every cart against exactly this.
       </PageHeader>
+
+      {stillHeld.length > 0 && (
+        <p role="status" className="rounded-xl bg-paper-2 p-4 text-[0.95rem] leading-relaxed">
+          <span className="font-medium">
+            {stillHeld.length === 1 ? "1 hold" : `${stillHeld.length} holds`} ({formatCents(stillHeld.reduce((sum, p) => sum + p.totalCents, 0))}) not released yet.
+          </span>{" "}
+          PayPal didn&apos;t confirm the release. Chaperone won&apos;t capture it; the money comes back when PayPal&apos;s authorization expires, and the Ledger shows
+          each attempt.
+        </p>
+      )}
 
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="space-y-12">

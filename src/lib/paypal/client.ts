@@ -3,6 +3,8 @@ const SANDBOX_BASE = "https://api-m.sandbox.paypal.com";
 export type PayPalConfig = {
   clientId: string;
   clientSecret: string;
+  /** How long a call may take before it counts as no answer (default 15 s). */
+  timeoutMs?: number;
   baseUrl?: string;
   fetch?: typeof fetch;
 };
@@ -65,7 +67,7 @@ export function createPayPalClient(config: PayPalConfig) {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(config.timeoutMs ?? TIMEOUT_MS),
     });
     const json = (await res.json()) as { access_token?: string; expires_in?: number; scope?: string } & PayPalErrorBody;
     if (!res.ok || !json.access_token) {
@@ -115,7 +117,7 @@ export function createPayPalClient(config: PayPalConfig) {
         ...options.headers,
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(config.timeoutMs ?? TIMEOUT_MS),
     });
     const debugId = res.headers.get("paypal-debug-id") ?? undefined;
     const text = await res.text();

@@ -127,13 +127,10 @@ export async function decideApproval(deps: ApprovalDeps, token: string, choice: 
 }
 
 /**
- * Serverless has no timer, so timeouts are applied lazily: run this from page loads, API calls and a
- * cron. It also retries voids that failed after a reject or expiry, and resumes stuck payments.
- */
-/**
- * Applies approvals that were answered or ran out. With a mandate, only that mandate's (an agent's or shopper's own
- * call, which needs its budget current before deciding); without one, everyone's, and stuck payments are resumed too:
- * that is the cron's and the once-a-minute page sweep's job, so one shopper's call never does PayPal work for others.
+ * Serverless has no timer, so approvals that were answered or ran out are applied lazily, and stuck payments resumed
+ * (resumeStuckPayments). With a mandate, only that mandate's: an agent's or shopper's own call, which needs its budget
+ * current before deciding. Without one, everyone's: the daily cron, and a page load at most once a minute. So one
+ * shopper's call never does PayPal work for anyone else.
  */
 export async function sweepApprovals(deps: PaymentDeps, scope: { mandateId?: string } = {}): Promise<Payment[]> {
   const now = nowOf(deps);
@@ -173,6 +170,7 @@ export async function sweepApprovals(deps: PaymentDeps, scope: { mandateId?: str
     if (outcome === "approved") continue;
     results.push(await voidPayment(deps, payment.id, outcome === "rejected" ? "rejected" : "approval_expired"));
   }
-  if (!scope.mandateId) results.push(...(await resumeStuckPayments(deps)));
+  // A mandate's own calls move only its own stuck payments, a few at a time.
+  results.push(...(await resumeStuckPayments(deps, scope.mandateId ? { mandateId: scope.mandateId, limit: 5 } : {})));
   return results;
 }

@@ -16,7 +16,7 @@ export function fakePayPal(shopApps: Record<string, string>) {
   const orders = new Map<string, { authId: string; body: any }>();
   const captureIds = new Map<string, string>();
   const calls: { op: string; caller: string; body?: unknown; requestId?: string | null }[] = [];
-  const fail: Partial<Record<"order" | "capture" | "void", Failure>> = {};
+  const fail: Partial<Record<"order" | "capture" | "void" | "readOrder", Failure>> = {};
   let counter = 0;
   let payeeOverride: string | undefined;
   let omitPayee = false;
@@ -59,6 +59,7 @@ export function fakePayPal(shopApps: Record<string, string>) {
     }
     const orderMatch = url.pathname.match(/^\/v2\/checkout\/orders\/([^/]+)$/);
     if (orderMatch && (!init?.method || init.method === "GET")) {
+      if (fail.readOrder) return error(fail.readOrder);
       const order = orders.get(orderMatch[1]!);
       if (!order) return Response.json({ name: "RESOURCE_NOT_FOUND" }, { status: 404 });
       const auth = auths.get(order.authId)!;

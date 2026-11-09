@@ -75,7 +75,7 @@ describe("applyWebhookEvent", () => {
   async function heldPayment(input: { cart?: ReturnType<typeof cart>; failCapture?: boolean } = {}) {
     const paypal = fakePayPal({ "shop-a-app": SHOP_A, "shop-b-app": SHOP_B });
     const deps: PaymentDeps = { db, platform: paypal.platform, payees: paypal.payees, clock: () => now };
-    if (input.failCapture) paypal.fail.capture = { status: 500, name: "INTERNAL_SERVER_ERROR", issue: "X" };
+    if (input.failCapture) paypal.fail.capture = { status: 422, name: "UNPROCESSABLE_ENTITY", issue: "INSTRUMENT_DECLINED" };
     const mandate = await seedLinkedMandate(db, samplePolicy());
     const result = await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: input.cart ?? cart() });
     if (!result.ok) throw new Error("no payment");

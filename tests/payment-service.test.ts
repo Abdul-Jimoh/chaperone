@@ -150,7 +150,7 @@ describe("requestPayment", () => {
     const { paypal, deps } = setup();
     const mandate = await seedLinkedMandate(db, samplePolicy());
     const input = { mandateId: mandate.id, runId: "run-1", source: "agent" as const, cart: cart() };
-    paypal.fail.capture = { status: 500, name: "INTERNAL_SERVER_ERROR", issue: "INTERNAL_SERVICE_ERROR" };
+    paypal.fail.capture = { status: 422, name: "UNPROCESSABLE_ENTITY", issue: "INSTRUMENT_DECLINED" };
     const first = ok(await requestPayment(deps, input));
     expect(first.payment.status).toBe("authorized");
     expect((await events(first.payment.id)).map((e) => e.type)).toContain("capture.failed");
@@ -367,7 +367,7 @@ describe("revokeMandate", () => {
     const { paypal, deps } = setup();
     const mandate = await seedLinkedMandate(db, samplePolicy());
     const input = { mandateId: mandate.id, runId: "run-1", source: "agent" as const, cart: cart() };
-    paypal.fail.capture = { status: 500, name: "INTERNAL_SERVER_ERROR", issue: "INTERNAL_SERVICE_ERROR" };
+    paypal.fail.capture = { status: 422, name: "UNPROCESSABLE_ENTITY", issue: "INSTRUMENT_DECLINED" };
     expect(ok(await requestPayment(deps, input)).payment.status).toBe("authorized");
     paypal.fail.void = { status: 500, name: "INTERNAL_SERVER_ERROR", issue: "INTERNAL_SERVICE_ERROR" };
     expect((await revokeMandate(deps, mandate.id)).stillOpen).toHaveLength(1);

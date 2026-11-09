@@ -100,6 +100,29 @@ describe("linking your own PayPal (Vault v3 via the JS SDK v6 button)", () => {
     await expect(none.browserToken(["chaperone.test"])).rejects.toThrow(/client SDK/);
   });
 
+  it("keeps a browser token per domain", async () => {
+    const asked: string[] = [];
+    const sdk = createPayPalClient({
+      clientId: "x",
+      clientSecret: "y",
+      fetch: async (_url, init) => {
+        asked.push(String(init?.body));
+        return Response.json({ access_token: `tok-${asked.length}`, expires_in: 900, scope: "Braintree:Vault" });
+      },
+    });
+    expect(await sdk.browserToken(["a.test"])).toBe("tok-1");
+    expect(await sdk.browserToken(["a.test"])).toBe("tok-1");
+    expect(await sdk.browserToken(["b.test"])).toBe("tok-2");
+    expect(asked[1]).toContain("domains%5B%5D=b.test");
+  });
+
+  it("gives up on a PayPal call that doesn't answer in time, so it counts as no answer", async () => {
+    const hang: typeof fetch = (_url, init) =>
+      new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)));
+    const slow = createPayPalClient({ clientId: "x", clientSecret: "y", fetch: hang, timeoutMs: 50 });
+    await expect(slow.accessToken()).rejects.toThrow(/timeout|aborted/i);
+  });
+
   it("finishing twice keeps one wallet and asks PayPal with the same request id", async () => {
     const { paypal, wallet, shopper } = await setup();
     const { setupToken, ticket } = await startWalletLink(wallet, shopper, "https://chaperone.test");

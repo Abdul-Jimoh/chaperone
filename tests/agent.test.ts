@@ -154,6 +154,33 @@ describe("shopping agent and expired approvals", () => {
   });
 });
 
+describe("shopping agent and other shoppers", () => {
+  it("leaves another mandate's expired approval alone; only its own are swept before it pays", async () => {
+    const paypal = fakePayPal({ "shop-a-app": SHOP_A, "shop-b-app": SHOP_B });
+    const paymentDeps: PaymentDeps = { db, platform: paypal.platform, payees: paypal.payees };
+    const theirs = await seedLinkedMandate(db, samplePolicy());
+    const waiting = await requestPayment(paymentDeps, {
+      mandateId: theirs.id,
+      runId: "run-theirs",
+      source: "agent",
+      cart: cart({ payeeMerchantId: SHOP_B, items: [{ productId: "kibble-12kg", title: "Dry dog food, 12 kg", unitPriceCents: 5_000, quantity: 1, category: "dog-food" }] }),
+    });
+    if (!waiting.ok) throw new Error("setup");
+    await db.update(approvals).set({ expiresAt: new Date(Date.now() - 60_000) }).where(eq(approvals.paymentId, waiting.payment.id));
+    const mine = await seedLinkedMandate(db, samplePolicy());
+    const { transport } = scriptedTransport(
+      [
+        { tools: [{ name: "search_products", input: { query: "ground coffee" } }] },
+        { tools: [{ name: "request_payment", input: { payee_merchant_id: SHOP_A, items: [{ listing_id: "L1", quantity: 1 }] } }] },
+        { text: "Bought coffee." },
+      ],
+      byTitle,
+    );
+    await runShoppingAgent({ llm: createLlm({ db, transport, budgetUsd: 1.5 }), search, payments: paymentDeps, shops }, { mandateId: mine.id, goal: "Restock coffee.", runId: "run-mine" });
+    expect((await db.select().from(payments).where(eq(payments.id, waiting.payment.id)))[0]!.status).toBe("pending_approval");
+  });
+});
+
 describe("shopping agent, replaying a recorded Haiku run", () => {
   it("restocks dog food from Pet Pantry and paper towels + dish soap from Home Basics", async () => {
     const paypal = fakePayPal(Object.fromEntries(DEMO_SHOPS.map((s) => [`${s.key}-app`, s.merchantId])));
