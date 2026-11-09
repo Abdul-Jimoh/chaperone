@@ -35,7 +35,7 @@ describe("GET /api/cron/sweep", () => {
     expect((await call(GET, `Bearer ${secret}x`)).status).toBe(401);
   });
 
-  it("sweeps and drops rate-limit windows older than two days", async () => {
+  it("answers 200 with what it swept and drops rate-limit windows older than two days", async () => {
     const old = new Date(Date.now() - 3 * 24 * 3600_000);
     await db.insert(rateLimits).values([
       { bucket: "old", windowStart: old, hits: 1 },

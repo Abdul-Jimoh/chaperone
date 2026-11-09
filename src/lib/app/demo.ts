@@ -41,6 +41,8 @@ export async function startDemoShopper(db: Db, client: string, now = new Date())
     .where(and(eq(users.email, TEMPLATE_EMAIL), eq(paymentMethods.status, "active")))
     .orderBy(desc(paymentMethods.createdAt))
     .limit(1);
+  // The hosted demo always has one; if it went missing, new shoppers would quietly have to link their own.
+  if (!template) console.warn("No shared demo wallet: new shoppers must link their own PayPal sandbox account.");
   await enforce(
     db,
     [

@@ -40,6 +40,11 @@ describe("demo session cookie", () => {
     expect(await sessionUserId()).toBeNull();
   });
 
+  it("refuses a token signed with the right key under another algorithm", async () => {
+    forge(await new SignJWT({}).setProtectedHeader({ alg: "HS512" }).setSubject("user-1").setAudience("chaperone:session").setExpirationTime("1h").sign(sessionKey));
+    expect(await sessionUserId()).toBeNull();
+  });
+
   it("refuses an expired or tampered token", async () => {
     forge(await new SignJWT({}).setProtectedHeader({ alg: "HS256" }).setSubject("user-1").setAudience("chaperone:session").setExpirationTime(Math.floor(Date.now() / 1000) - 60).sign(sessionKey));
     expect(await sessionUserId()).toBeNull();

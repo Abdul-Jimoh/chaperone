@@ -4,15 +4,14 @@ import { isLocalUrl, startLocalDb } from "./local-db";
 
 process.loadEnvFile(".env.local");
 const stop = isLocalUrl(process.env.DATABASE_URL) ? await startLocalDb() : null;
-const app = spawn("pnpm", ["exec", "next", "dev"], { stdio: "inherit" });
-const shutdown = async () => {
-  app.kill("SIGINT");
-  await stop?.();
-  process.exit(0);
+// On Windows pnpm is pnpm.cmd, which only starts through a shell.
+const app = spawn("pnpm", ["exec", "next", "dev"], { stdio: "inherit", shell: process.platform === "win32" });
+let stopping: Promise<void> | undefined;
+const finish = async (code: number) => {
+  stopping ??= Promise.resolve(stop?.());
+  await stopping;
+  process.exit(code);
 };
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-app.on("exit", async (code) => {
-  await stop?.();
-  process.exit(code ?? 0);
-});
+process.on("SIGINT", () => app.kill("SIGINT"));
+process.on("SIGTERM", () => app.kill("SIGTERM"));
+app.on("exit", (code) => finish(code ?? 0));

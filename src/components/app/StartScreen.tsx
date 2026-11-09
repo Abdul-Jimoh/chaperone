@@ -2,7 +2,7 @@ import { StartForm } from "./StartForm";
 import { SHELL } from "./ui";
 
 const STEPS = [
-  { n: "01", title: "A demo shopper", body: "You get a private shopper with a PayPal sandbox wallet already linked. No sign-up, no real money." },
+  { n: "01", title: "A demo shopper", body: "You get a private shopper who pays through the PayPal sandbox. No sign-up, no real money." },
   { n: "02", title: "Your rules", body: "Say what the agent may buy, in a sentence. Claude turns it into rules; nothing is enforced until you confirm them." },
   { n: "03", title: "Shopping, checked", body: "Send Claude shopping and watch each payment go through, wait for your OK on your phone, or get blocked." },
 ];

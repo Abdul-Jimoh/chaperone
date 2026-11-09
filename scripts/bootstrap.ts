@@ -1,9 +1,11 @@
 // One command to get a local copy running: pnpm bootstrap
 // Creates .env.local, generates the keys, sets up a local Postgres (unless DATABASE_URL points elsewhere), applies the
 // migrations, checks the PayPal sandbox credentials against PayPal, and lists exactly what is still missing.
-// Safe to run again: it never overwrites a value you set.
+// Safe to run again: it never overwrites a value you set. It migrates only the local Postgres it manages; for a hosted
+// database (e.g. one production also uses) it asks you to pass --migrate.
 import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { calculateJwkThumbprint, exportJWK, generateKeyPair } from "jose";
@@ -28,20 +30,16 @@ if (!existsSync(ENV)) {
   copyFileSync(".env.example", ENV);
   ok(`created ${ENV} from .env.example`);
 }
-let text = readFileSync(ENV, "utf8");
-const read = () => {
-  const env: Record<string, string> = {};
-  for (const line of text.split("\n")) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (m) env[m[1]!] = m[2]!.replace(/^(['"])(.*)\1$/, "$2");
-  }
-  return env;
-};
+// Windows checkouts may have CRLF line endings; parse and write with LF so no key ever reads as missing.
+let text = readFileSync(ENV, "utf8").replace(/\r\n/g, "\n");
+const read = () => parseEnv(text) as Record<string, string>;
 /** Sets a variable only if it is missing or empty; values the user set are left alone. */
 const fill = (key: string, value: string, label: string) => {
   if (read()[key]) return ok(`${key} already set`);
-  const line = `${key}=${value.includes(" ") || value.startsWith("{") ? `'${value}'` : value}`;
-  text = new RegExp(`^${key}=.*$`, "m").test(text) ? text.replace(new RegExp(`^${key}=.*$`, "m"), line) : `${text.trimEnd()}\n${line}\n`;
+  const line = `${key}=${/[\s#'"{]/.test(value) ? `'${value}'` : value}`;
+  const existing = new RegExp(`^${key}=.*$`, "m");
+  // A function replacement, so "$&" and friends in a value are written as they are.
+  text = existing.test(text) ? text.replace(existing, () => line) : `${text.trimEnd()}\n${line}\n`;
   writeFileSync(ENV, text);
   ok(`${key}: ${label}`);
 };
@@ -56,9 +54,12 @@ fill("DATABASE_URL_UNPOOLED", read().DATABASE_URL!, "same as DATABASE_URL");
 const env = read();
 
 console.log("\nDatabase");
-const stop = isLocalUrl(env.DATABASE_URL) ? await startLocalDb() : null;
+const local = isLocalUrl(env.DATABASE_URL);
+const stop = local ? await startLocalDb() : null;
 if (stop) ok(`local Postgres running from .local/pg`);
-try {
+if (!local && !process.argv.includes("--migrate")) {
+  console.log("  · DATABASE_URL points at a hosted database, so migrations weren't applied. Run pnpm bootstrap --migrate to apply them there.");
+} else try {
   const pool = new Pool({ connectionString: env.DATABASE_URL_UNPOOLED || env.DATABASE_URL });
   await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
   await pool.end();
