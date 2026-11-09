@@ -176,10 +176,12 @@ export async function walletClientToken(): Promise<WalletStart> {
   }
 }
 
-export async function startWalletLinkAction(): Promise<{ setupToken: string; ticket: string }> {
+export async function startWalletLinkAction(): Promise<{ setupToken: string; ticket: string } | { refused: string }> {
   const userId = await requireUser();
-  await enforce(serverDb(), [[LIMITS.walletLinksPerShopper, userId]]);
-  return startWalletLink(walletDeps(), userId, await appOrigin());
+  return refusable(async () => {
+    await enforce(serverDb(), [[LIMITS.walletLinksPerShopper, userId]]);
+    return startWalletLink(walletDeps(), userId, await appOrigin());
+  });
 }
 
 export async function finishWalletLinkAction(setupToken: string, ticket: string): Promise<{ ok: true; email: string } | { ok: false; error: string }> {

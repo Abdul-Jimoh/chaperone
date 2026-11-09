@@ -73,11 +73,15 @@ export function LinkPayPal({ wallet }: { wallet: Wallet }) {
           .start(
             { presentationMode: "auto" },
             startWalletLinkAction().then((r) => {
+              if ("refused" in r) throw new Error(r.refused);
               ticket = r.ticket;
               return { vaultSetupToken: r.setupToken };
             }),
           )
-          .catch(() => setState({ step: "failed", error: "PayPal couldn't open. Allow pop-ups for this site and try again." }));
+          .catch((error) => {
+            const refused = error instanceof Error && error.message && !/popup|window/i.test(error.message) ? error.message : null;
+            setState({ step: "failed", error: refused ?? "PayPal couldn't open. Allow pop-ups for this site and try again." });
+          });
       });
       slot.current?.replaceChildren(button);
       setState({ step: "ready" });
