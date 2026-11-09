@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { approvals, ledgerEvents, payments, reservations } from "@/db/schema";
+import { approvals, ledgerEvents, mandates, payments, reservations } from "@/db/schema";
 import {
   APPROVAL_LINK_TTL_MS,
   decideApproval,
@@ -325,6 +325,27 @@ describe("revokeMandate", () => {
     const result = ok(await inFlight);
     expect(result.payment.status).toBe("voided");
     expect(paypal.ops()).toEqual(["order:platform-app", "void:shop-a-app"]);
+  });
+
+  it("a revoke that commits after PayPal answers but before the hold is recorded still wins: no approval, the hold is voided", async () => {
+    const { paypal, deps } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const gate = paypal.holdOrders();
+    // Over the approval line, so no capture step follows that could catch the revoke instead.
+    const inFlight = requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: bigCart() });
+    await gate.orderStarted;
+    // Take the mandate's lock first, let PayPal answer, and revoke while placeHold's transaction waits on the lock.
+    await db.transaction(async (tx) => {
+      await tx.select().from(mandates).where(eq(mandates.id, mandate.id)).for("no key update");
+      gate.release();
+      await new Promise((r) => setTimeout(r, 300));
+      await tx.update(mandates).set({ status: "revoked", revokedAt: new Date() }).where(eq(mandates.id, mandate.id));
+    });
+
+    const result = ok(await inFlight);
+    expect(result).toMatchObject({ decision: "needs_approval", payment: { status: "voided" } });
+    expect(paypal.ops()).toEqual(["order:platform-app", "void:shop-b-app"]);
+    expect(await db.select().from(approvals)).toEqual([]);
   });
 
   it("a hold that needs approval and is still being placed when the user revokes is voided", async () => {
