@@ -6,6 +6,8 @@ You write the rules in plain English ("dog food and paper towels, at most $80 a 
 
 **Live demo:** [chaperone.site](https://www.chaperone.site). Press *Try the demo*: no sign-up, PayPal sandbox only, no real money.
 
+**Demo video (2:15):** [youtu.be/ieQRPT1psfI](https://youtu.be/ieQRPT1psfI)
+
 Built for the PayPal AI Hackathon. MIT licensed.
 
 ## Try it in three minutes
