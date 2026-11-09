@@ -153,13 +153,13 @@ async function budgets(deps: PaymentDeps, mandateId: string, policy: Policy, now
   };
 }
 
-// Timeouts are applied lazily, so every agent call also moves expired approvals on and frees their budget.
-async function sweep(deps: PaymentDeps) {
-  await sweepApprovals(deps).catch((error) => console.warn("approval sweep failed:", error));
+// Timeouts are applied lazily, so every agent call also moves its own mandate's expired approvals on and frees their budget.
+async function sweep(deps: PaymentDeps, mandateId: string) {
+  await sweepApprovals(deps, { mandateId }).catch((error) => console.warn("approval sweep failed:", error));
 }
 
 export async function checkMandate(deps: PaymentDeps, mandateId: string, preview?: CartInput, shopping?: Shopping) {
-  await sweep(deps);
+  await sweep(deps, mandateId);
   const now = deps.clock?.() ?? new Date();
   const mandate = await loadMandate(deps, mandateId);
   const { policy } = mandate;
@@ -220,7 +220,7 @@ function view(policy: Policy, p: Payment) {
 }
 
 export async function listSpend(deps: PaymentDeps, mandateId: string, limit = 20) {
-  await sweep(deps);
+  await sweep(deps, mandateId);
   const now = deps.clock?.() ?? new Date();
   const mandate = await loadMandate(deps, mandateId);
   const recent = await deps.db
@@ -245,7 +245,7 @@ export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, i
   if ("issues" in resolved) {
     return { error: "invalid_cart", issues: resolved.issues, message: "The cart is malformed; nothing was recorded or charged." };
   }
-  await sweep(deps);
+  await sweep(deps, mandateId);
   const now = deps.clock?.() ?? new Date();
   const runId = mcpRunId(mandateId, now, mandate.policy.timezone);
   const result = await requestPayment(deps, { mandateId, runId, source: "mcp", cart: resolved.cart });

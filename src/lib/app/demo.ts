@@ -198,7 +198,7 @@ export async function simulatePurchase(deps: PaymentDeps, world: DemoWorld, user
   const mandate = await ownMandate(deps.db, userId);
   await enforce(deps.db, await purchaseChecks(deps.db, userId), deps.clock?.());
   // Like a real agent's request: expired approvals give their budget back before this one is decided.
-  await sweepApprovals(deps).catch((error) => console.warn("approval sweep failed:", error));
+  await sweepApprovals(deps, { mandateId: mandate.id }).catch((error) => console.warn("approval sweep failed:", error));
   return requestPayment(deps, { mandateId: mandate.id, runId: `demo-${attemptId}`, source: "agent", cart: scenarioCart(world, scenario) });
 }
 

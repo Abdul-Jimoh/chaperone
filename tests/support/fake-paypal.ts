@@ -12,6 +12,9 @@ type Failure = { status: number; name: string; issue: string } | "network" | "lo
 export function fakePayPal(shopApps: Record<string, string>) {
   const auths = new Map<string, Auth>();
   const responses = new Map<string, unknown>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const orders = new Map<string, { authId: string; body: any }>();
+  const captureIds = new Map<string, string>();
   const calls: { op: string; caller: string; body?: unknown; requestId?: string | null }[] = [];
   const fail: Partial<Record<"order" | "capture" | "void", Failure>> = {};
   let counter = 0;
@@ -54,6 +57,24 @@ export function fakePayPal(shopApps: Record<string, string>) {
       responses.set(requestId!, token);
       return Response.json(token);
     }
+    const orderMatch = url.pathname.match(/^\/v2\/checkout\/orders\/([^/]+)$/);
+    if (orderMatch && (!init?.method || init.method === "GET")) {
+      const order = orders.get(orderMatch[1]!);
+      if (!order) return Response.json({ name: "RESOURCE_NOT_FOUND" }, { status: 404 });
+      const auth = auths.get(order.authId)!;
+      return Response.json({
+        ...order.body,
+        purchase_units: [
+          {
+            ...order.body.purchase_units[0],
+            payments: {
+              authorizations: [{ id: auth.id, status: auth.status, amount: auth.amount }],
+              ...(captureIds.has(auth.id) ? { captures: [{ id: captureIds.get(auth.id), status: "COMPLETED", amount: auth.amount }] } : {}),
+            },
+          },
+        ],
+      });
+    }
     if (url.pathname === "/v2/checkout/orders" && init?.method === "POST") {
       calls.push({ op: "order", caller, body, requestId });
       onOrder?.();
@@ -80,6 +101,7 @@ export function fakePayPal(shopApps: Record<string, string>) {
         ],
       };
       responses.set(requestId!, order);
+      orders.set(order.id, { authId: auth.id, body: order });
       if (fail.order === "lost") return error("lost");
       return Response.json(order);
     }
@@ -96,6 +118,7 @@ export function fakePayPal(shopApps: Record<string, string>) {
       if (auth.status !== "CREATED") return error({ status: 422, name: "UNPROCESSABLE_ENTITY", issue: "AUTHORIZATION_ALREADY_CAPTURED" });
       auth.status = "CAPTURED";
       const capture = { id: `CAP-${auth.id}`, status: "COMPLETED", amount: auth.amount, final_capture: true };
+      captureIds.set(auth.id, capture.id);
       responses.set(requestId!, capture);
       if (fail.capture === "lost") return error("lost");
       return Response.json(capture);
@@ -122,6 +145,10 @@ export function fakePayPal(shopApps: Record<string, string>) {
     fail,
     auths,
     ops: () => calls.map((c) => `${c.op}:${c.caller}`),
+    /** PayPal stops recognising earlier PayPal-Request-Ids (they are kept only for a while), so a retry is a new request. */
+    forgetRequestIds() {
+      responses.clear();
+    },
     /** PayPal reports a different payee than requested, as a compromised or buggy path would. */
     reportPayee(merchantId: string) {
       payeeOverride = merchantId;

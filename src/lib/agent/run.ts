@@ -152,7 +152,7 @@ export async function runShoppingAgent(
     };
     await input.beforePayment?.();
     // Timeouts are applied lazily, so expired approvals give their budget back before this one is decided.
-    await sweepApprovals(deps.payments).catch((error) => console.warn("approval sweep failed:", error));
+    await sweepApprovals(deps.payments, { mandateId: input.mandateId }).catch((error) => console.warn("approval sweep failed:", error));
     const result = await requestPayment(deps.payments, { mandateId: input.mandateId, runId: input.runId, source: "agent", cart });
     if (!result.ok) throw new Error(`Cart rejected: ${result.issues.join("; ")}`);
     const message = outcomeMessage(policy, result.payment);

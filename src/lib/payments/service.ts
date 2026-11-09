@@ -4,10 +4,10 @@ import { approvals, ledgerEvents, mandates, paymentMethods, payments } from "@/d
 import { paypalRequestId } from "@/lib/ledger/idempotency";
 import { decideAndReserve, releaseReservation, settleReservation, type Payment } from "@/lib/ledger/reserve";
 import { PayPalError, type PayPalClient } from "@/lib/paypal/client";
-import { toCents } from "@/lib/paypal/money";
-import { createAuthorizeOrder, firstAuthorization } from "@/lib/paypal/orders";
+import { money, toCents } from "@/lib/paypal/money";
+import { createAuthorizeOrder, firstAuthorization, getOrder } from "@/lib/paypal/orders";
 import { voidHold, type PayeeClients } from "@/lib/paypal/payees";
-import { captureAuthorization, getAuthorization } from "@/lib/paypal/payments";
+import { captureAuthorization, getAuthorization, type Capture } from "@/lib/paypal/payments";
 import type { Evaluation } from "@/lib/policy/evaluate";
 import { cartSchema } from "@/lib/policy/schema";
 
@@ -51,6 +51,8 @@ const STALE_CLAIM_MS = 2 * 60 * 1000;
 
 // After this many declined captures the hold is released, so its budget isn't locked until PayPal expires it.
 export const MAX_CAPTURE_ATTEMPTS = 3;
+export const MAX_RESUME_ATTEMPTS = 5;
+export const MAX_VOID_ATTEMPTS = 5;
 
 const OPEN_HOLD = ["authorized", "pending_approval"] as const;
 
@@ -288,7 +290,10 @@ export async function capturePayment(deps: PaymentDeps, paymentId: string, optio
 
   let capture;
   try {
-    capture = await captureAuthorization(deps.platform, payment.paypalAuthorizationId!, {
+    // PayPal already captured it (the answer was lost): record that capture. Sending another, even with the same
+    // request id, fails once PayPal no longer remembers the id, and the payment would stay unpaid in the ledger.
+    capture = options.captured ? await existingCapture(deps, payment) : null;
+    capture ??= await captureAuthorization(deps.platform, payment.paypalAuthorizationId!, {
       requestId: paypalRequestId(payment.idempotencyKey, "capture"),
     });
   } catch (error) {
@@ -329,6 +334,13 @@ export async function capturePayment(deps: PaymentDeps, paymentId: string, optio
   });
 }
 
+async function existingCapture(deps: PaymentDeps, payment: Payment): Promise<Capture | null> {
+  if (!payment.paypalOrderId) return null;
+  const order = await getOrder(deps.platform, payment.paypalOrderId);
+  const found = order.purchase_units[0]?.payments?.captures?.find((c) => c.status !== "DECLINED" && c.status !== "FAILED");
+  return found ? { id: found.id, status: found.status, amount: found.amount ?? money(payment.totalCents, payment.currency) } : null;
+}
+
 export type VoidReason = "rejected" | "approval_expired" | "mandate_revoked" | "capture_failed" | "resumed";
 
 /** Releases an open hold with the payee shop's credentials and gives the budget back. */
@@ -338,6 +350,13 @@ export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: 
     const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("no key update");
     const interrupted = options.resume && payment?.status === "voiding" && now.getTime() - payment.updatedAt.getTime() > STALE_CLAIM_MS;
     if (!payment || (!(OPEN_HOLD as readonly string[]).includes(payment.status) && !interrupted)) return null;
+    // A void PayPal keeps refusing isn't sent forever (sweeps and revokes would retry it every time); the ledger shows
+    // each failure, and PayPal releases the hold itself when the authorization expires.
+    const [failed] = await tx
+      .select({ n: count() })
+      .from(ledgerEvents)
+      .where(and(eq(ledgerEvents.paymentId, paymentId), eq(ledgerEvents.type, "void.failed")));
+    if ((failed?.n ?? 0) >= MAX_VOID_ATTEMPTS) return null;
     const [claimed] = await tx
       .update(payments)
       .set({ status: "voiding", updatedAt: now })
@@ -390,10 +409,12 @@ export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: 
 /**
  * Picks up payments that stopped part-way and would otherwise hold their budget until PayPal expires the hold:
  * a hold, capture or void interrupted after its claim, and a capture PayPal declined (retried, then released).
- * Runs from the approval sweep, so page loads, agent calls and the cron all move them on.
+ * Runs from the unscoped approval sweep: the cron and at most once a minute from a page load, never inside an agent's call.
+ * Bounded: a row whose resume keeps failing stops after MAX_RESUME_ATTEMPTS.
  */
 export async function resumeStuckPayments(deps: PaymentDeps, limit = 20): Promise<Payment[]> {
   const before = new Date(nowOf(deps).getTime() - STALE_CLAIM_MS);
+  const failedResumes = sql`(select count(*) from ${ledgerEvents} where ${ledgerEvents.paymentId} = ${payments.id} and ${ledgerEvents.type} = 'resume.failed')`;
   const stuck = await deps.db
     .select()
     .from(payments)
@@ -404,6 +425,8 @@ export async function resumeStuckPayments(deps: PaymentDeps, limit = 20): Promis
           inArray(payments.status, ["authorizing", "capturing", "voiding"]),
           and(eq(payments.status, "authorized"), sql`cardinality(${payments.anomalyFlags}) = 0`),
         ),
+        // A row that keeps failing stops being retried; it stays visible in the ledger with each failure.
+        sql`${failedResumes} < ${MAX_RESUME_ATTEMPTS}`,
       ),
     )
     .orderBy(payments.updatedAt)
@@ -421,11 +444,16 @@ export async function resumeStuckPayments(deps: PaymentDeps, limit = 20): Promis
       } else results.push(await capturePayment(deps, payment.id, { resume: true }));
     } catch (error) {
       console.warn(`resuming payment ${payment.id} failed:`, error instanceof Error ? error.message : error);
-      // To the back of the queue, so rows that keep failing can't fill every sweep.
+      // To the back of the queue, so rows that keep failing can't fill every sweep, and counted towards the limit.
       await deps.db
-        .update(payments)
-        .set({ updatedAt: nowOf(deps) })
-        .where(and(eq(payments.id, payment.id), eq(payments.status, payment.status)))
+        .transaction(async (tx) => {
+          const [moved] = await tx
+            .update(payments)
+            .set({ updatedAt: nowOf(deps) })
+            .where(and(eq(payments.id, payment.id), eq(payments.status, payment.status)))
+            .returning();
+          if (moved) await logEvent(tx, moved, "resume.failed", nowOf(deps), { detail: { status: payment.status, error: error instanceof Error ? error.message.slice(0, 200) : "unknown" } });
+        })
         .catch(() => {});
     }
   }

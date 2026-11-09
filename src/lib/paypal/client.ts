@@ -49,6 +49,9 @@ const CLIENT_SDK_SCOPES = new Set([
   "https://uri.paypal.com/services/credit/client-offer-presentment/read",
 ]);
 
+/** A PayPal call that takes longer fails as "no answer" and is resumed later, rather than holding up an agent's call. */
+const TIMEOUT_MS = 15_000;
+
 export function createPayPalClient(config: PayPalConfig) {
   const baseUrl = config.baseUrl ?? SANDBOX_BASE;
   const doFetch = config.fetch ?? fetch;
@@ -62,6 +65,7 @@ export function createPayPalClient(config: PayPalConfig) {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const json = (await res.json()) as { access_token?: string; expires_in?: number; scope?: string } & PayPalErrorBody;
     if (!res.ok || !json.access_token) {
@@ -77,20 +81,22 @@ export function createPayPalClient(config: PayPalConfig) {
     return token.value;
   }
 
-  let browser: { value: string; expiresAt: number } | undefined;
+  const browser = new Map<string, { value: string; expiresAt: number }>();
 
   /**
    * A browser-safe token for the JS SDK v6, bound to the app's domains. It goes to every visitor, so it is refused unless
    * PayPal scoped it to the client SDK: a full REST token here would let anyone move money as the platform.
    */
   async function browserToken(domains: string[]): Promise<string> {
-    if (browser && browser.expiresAt - 5 * 60_000 > Date.now()) return browser.value;
+    const key = domains.join(" ");
+    const cached = browser.get(key);
+    if (cached && cached.expiresAt - 5 * 60_000 > Date.now()) return cached.value;
     const params = new URLSearchParams({ grant_type: "client_credentials", response_type: "client_token", intent: "sdk_init" });
     for (const d of domains) params.append("domains[]", d);
     const token = await oauthToken(params.toString());
     const scopes = token.scope.split(" ").filter(Boolean);
     if (!scopes.length || !scopes.every((s) => CLIENT_SDK_SCOPES.has(s))) throw new Error("PayPal returned a token that isn't a client SDK token");
-    browser = token;
+    browser.set(key, token);
     return token.value;
   }
 
@@ -109,6 +115,7 @@ export function createPayPalClient(config: PayPalConfig) {
         ...options.headers,
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const debugId = res.headers.get("paypal-debug-id") ?? undefined;
     const text = await res.text();

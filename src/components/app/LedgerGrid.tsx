@@ -70,6 +70,7 @@ const EVENT_LABEL: Record<string, string> = {
   "capture.completed": "Captured: shop paid",
   "capture.failed": "Capture failed",
   "void.failed": "Cancelling the hold failed",
+  "resume.failed": "Retry didn't go through",
   anomaly: "Anomaly flagged",
 };
 

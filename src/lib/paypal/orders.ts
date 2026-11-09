@@ -22,7 +22,7 @@ export type Order = {
     custom_id?: string;
     invoice_id?: string;
     payee?: { merchant_id?: string; email_address?: string };
-    payments?: { authorizations?: Authorization[]; captures?: { id: string; status: string }[] };
+    payments?: { authorizations?: Authorization[]; captures?: { id: string; status: string; amount?: Money }[] };
   }[];
   links?: { href: string; rel: string }[];
 };
