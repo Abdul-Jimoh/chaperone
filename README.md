@@ -178,26 +178,21 @@ The ledger page shows each payment's trail with its PayPal IDs. The public demo 
 
 ## Run it locally
 
-You need Node 22, pnpm, a Postgres database (Neon works), a PayPal developer account with sandbox accounts, and optionally an Anthropic API key and a Channel3 key.
+You need Node 22 and pnpm. Everything else is set up by one command, except your PayPal sandbox accounts, which only PayPal's dashboard can create.
 
 ```sh
 pnpm install
-cp .env.example .env.local      # fill it in; see below
-pnpm db:migrate                 # applies drizzle/ to DATABASE_URL_UNPOOLED
-pnpm dev                        # http://localhost:3000
+pnpm bootstrap      # creates .env.local, generates keys, sets up a local Postgres (no account needed), applies migrations
+pnpm dev:local      # http://localhost:3000, with the local Postgres
 ```
 
-What goes in `.env.local`:
+`pnpm bootstrap` ([`scripts/bootstrap.ts`](scripts/bootstrap.ts)) checks each PayPal credential against PayPal and lists exactly what is still missing; run it again after filling them in. It never overwrites a value you set. What it asks for, from [developer.paypal.com](https://developer.paypal.com) (sandbox):
 
-- **PayPal sandbox:**
-  - The platform REST app (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`) with Vault enabled.
-  - Three sandbox business accounts as the shops. Each needs its merchant ID and its own REST app (`PAYPAL_SHOP_{A,B,C}_*`), because only the payee can void a hold.
-  - Any other merchant ID as `PAYPAL_ROGUE_MERCHANT_ID`.
-- **Keys:** `node scripts/generate-mandate-key.mjs` prints `MANDATE_SIGNING_JWK`. `openssl rand -base64 32` makes `APPROVAL_LINK_SECRET` and `CRON_SECRET`.
-- **The demo wallet:**
-  1. Vault the sandbox buyer once with `pnpm tsx scripts/spike-paypal.ts vault-start`, approve in the browser, then run `vault-finish`.
-  2. Run `pnpm tsx scripts/seed.ts` to create the demo shopper the visitors borrow it from.
-- **Webhooks:** run `pnpm tsx scripts/register-webhook.ts <https url>/api/webhooks/paypal`. It saves `PAYPAL_WEBHOOK_ID`.
+- **The platform app** (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`), with Vault enabled in its features.
+- **Three sandbox business accounts as the shops:** each one's merchant ID, and a REST app created for that account (`PAYPAL_SHOP_{A,B,C}_*`), because only the payee can void a hold.
+- **A sandbox personal account** to pay with. In the app, link it with PayPal's button on the setup page.
+
+Optional: `ANTHROPIC_API_KEY` (without it, setup offers the example rules as Claude compiled them earlier, and the agent trip needs it), `PAYPAL_ROGUE_MERCHANT_ID` (the shop in the tricked cart), and webhooks, which need a public https URL (`pnpm tsx scripts/register-webhook.ts <url>/api/webhooks/paypal` saves `PAYPAL_WEBHOOK_ID`). To use a hosted Postgres such as Neon instead, put its URLs in `DATABASE_URL` and `DATABASE_URL_UNPOOLED` before running `pnpm bootstrap`.
 
 ## Tests
 

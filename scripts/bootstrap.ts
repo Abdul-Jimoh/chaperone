@@ -85,7 +85,7 @@ for (const shop of ["A", "B", "C"]) {
   const merchant = env[`PAYPAL_SHOP_${shop}_MERCHANT_ID`];
   if (merchant) ok(`PAYPAL_SHOP_${shop}_MERCHANT_ID set`);
   else missing(`PAYPAL_SHOP_${shop}_MERCHANT_ID: the merchant ID of a sandbox business account (its Account info)`);
-  await credentials(`PAYPAL_SHOP_${shop}_CLIENT_ID / _SECRET, a REST app created while logged in as that business account (only the payee can void a hold)`, env[`PAYPAL_SHOP_${shop}_CLIENT_ID`], env[`PAYPAL_SHOP_${shop}_CLIENT_SECRET`]);
+  await credentials(`PAYPAL_SHOP_${shop}_CLIENT_ID / _SECRET, a REST app created for that sandbox business account (only the payee can void a hold)`, env[`PAYPAL_SHOP_${shop}_CLIENT_ID`], env[`PAYPAL_SHOP_${shop}_CLIENT_SECRET`]);
 }
 if (env.PAYPAL_ROGUE_MERCHANT_ID) ok("PAYPAL_ROGUE_MERCHANT_ID set");
 else console.log("  · PAYPAL_ROGUE_MERCHANT_ID: optional, any other merchant ID; used as the shop in the tricked cart");
