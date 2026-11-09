@@ -522,6 +522,20 @@ describe("an outage is ridden out, on every path", () => {
     expect(paypal.calls.filter((c) => c.op === "void").length).toBe(voidsBefore);
   });
 
+  it("a rejected hold PayPal refused to release five times gives its budget back when PayPal expires it", async () => {
+    const { paypal, deps, advance } = setup();
+    const { link, payment } = await approved(deps);
+    paypal.fail.void = { status: 403, name: "PERMISSION_DENIED", issue: "PERMISSION_DENIED" };
+    await decideApproval(deps, link.token, "reject");
+    await minuteSweeps(deps, advance, 60);
+    expect(paypal.calls.filter((c) => c.op === "void").length).toBe(5);
+    paypal.auths.get(payment.paypalAuthorizationId!)!.status = "EXPIRED";
+    advance(7 * 60);
+    await sweepApprovals(deps);
+    expect((await db.select().from(payments).where(eq(payments.id, payment.id)))[0]!.status).toBe("voided");
+    expect(await reservation(payment.id)).toBe("released");
+  });
+
   it("a void stuck part-way past the limit is still looked up, and released when PayPal expires the hold", async () => {
     const { paypal, deps, advance } = setup();
     const mandate = await seedLinkedMandate(db, samplePolicy());
