@@ -64,6 +64,24 @@ flowchart LR
   webhooks["PayPal webhooks<br/>(signature verified)"] --> ledger
 ```
 
+## How it compares
+
+Other ways to let an agent spend, as their makers describe them (November 2026):
+
+- **Card controls at the network** ([Visa Intelligent Commerce](https://www.digitalcommerce360.com/2025/05/06/visa-mastercard-ai-agentic-commerce/amp/), Mastercard Agent Pay): tokens for registered agents, with spending limits and merchant categories set by the cardholder.
+- **Virtual cards** ([Privacy.com for AI agents](https://privacy.com/ai)): a card per agent or merchant, with a spending limit, locked to one merchant if you like; over-limit charges are declined.
+- **Signed mandates** ([Google's AP2](https://discuss.google.dev/t/new-agent-payments-protocol-ap2-an-open-and-secure-standard-for-agentic-payments/265614)): an open protocol in which the user signs an intent mandate (the rules) and a cart mandate (the exact purchase) as verifiable credentials.
+- **PayPal's agentic commerce services** ([Agent Ready and Store Sync](https://shopware.com/en/press/press-releases/paypal-launches-agentic-commerce-services-to-power-ai-driven-shopping)): the merchant side, putting shops' catalogs in front of AI agents and bringing PayPal's buyer protection and fraud tools to agent-initiated checkout.
+
+What Chaperone does differently:
+
+- **The rules are the user's own sentence,** compiled by Claude, read back and signed (an AP2-style intent mandate), and every payment records the hash of the rules it was checked against.
+- **A purchase over your line isn't declined; it waits.** It is placed as a PayPal authorization hold, so the money is set aside but not paid, and one tap captures or releases it.
+- **The shop is checked by its PayPal merchant ID,** which PayPal reports back on the hold, not by a name or URL the agent supplies.
+- **Any MCP agent can use it** by signing in once; it never sees a card number or a PayPal credential.
+
+It sits on the buyer's side and complements PayPal's merchant-side services: a shop reached through Store Sync could still be paid under a Chaperone mandate.
+
 ## Where Claude is used, and where it isn't
 
 Claude (`claude-haiku-5-5` by default) does three jobs:
