@@ -4,7 +4,7 @@ import { errors as joseErrors, jwtVerify, SignJWT } from "jose";
 import { approvals, ledgerEvents, payments } from "@/db/schema";
 import type { Payment } from "@/lib/ledger/reserve";
 import { sha256Hex } from "@/lib/policy/canonical";
-import { capturePayment, resumeStuckPayments, voidPayment, type PaymentDeps } from "./service";
+import { capturePayment, resumeStuckPayments, voidPayment, waitedOutBackoff, type PaymentDeps } from "./service";
 
 export type ApprovalDeps = PaymentDeps & { approvalSecret: string };
 
@@ -132,7 +132,7 @@ export async function decideApproval(deps: ApprovalDeps, token: string, choice: 
  * current before deciding. Without one, everyone's: the daily cron, and a page load at most once a minute. So one
  * shopper's call never does PayPal work for anyone else.
  */
-export async function sweepApprovals(deps: PaymentDeps, scope: { mandateId?: string } = {}): Promise<Payment[]> {
+export async function sweepApprovals(deps: PaymentDeps, scope: { mandateId?: string; resumeLimit?: number } = {}): Promise<Payment[]> {
   const now = nowOf(deps);
   const due = await deps.db
     .select({ approval: approvals, payment: payments })
@@ -142,7 +142,8 @@ export async function sweepApprovals(deps: PaymentDeps, scope: { mandateId?: str
       and(
         eq(payments.status, "pending_approval"),
         scope.mandateId ? eq(payments.mandateId, scope.mandateId) : undefined,
-        or(and(isNull(approvals.decidedAt), lte(approvals.expiresAt, now)), isNotNull(approvals.decidedAt)),
+        // A decided one is here only because its void didn't go through; retried with the same backoff as any retry.
+        or(and(isNull(approvals.decidedAt), lte(approvals.expiresAt, now)), and(isNotNull(approvals.decidedAt), waitedOutBackoff(now))),
       ),
     );
 
@@ -171,6 +172,6 @@ export async function sweepApprovals(deps: PaymentDeps, scope: { mandateId?: str
     results.push(await voidPayment(deps, payment.id, outcome === "rejected" ? "rejected" : "approval_expired"));
   }
   // A mandate's own calls move only its own stuck payments, a few at a time.
-  results.push(...(await resumeStuckPayments(deps, scope.mandateId ? { mandateId: scope.mandateId, limit: 2 } : {})));
+  results.push(...(await resumeStuckPayments(deps, scope.mandateId ? { mandateId: scope.mandateId, limit: 2 } : { limit: scope.resumeLimit })));
   return results;
 }

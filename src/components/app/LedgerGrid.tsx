@@ -71,6 +71,8 @@ const EVENT_LABEL: Record<string, string> = {
   "capture.failed": "Capture failed",
   "void.failed": "Cancelling the hold failed",
   "resume.failed": "Retry didn't go through",
+  "capture.unanswered": "PayPal didn't answer the capture",
+  "void.unanswered": "PayPal didn't answer the release",
   anomaly: "Anomaly flagged",
 };
 

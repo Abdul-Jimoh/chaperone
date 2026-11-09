@@ -258,7 +258,7 @@ describe("recovery stays bounded", () => {
   it("stops sending a void PayPal keeps refusing after five tries", async () => {
     const { paypal, deps, advance } = setup();
     const { link } = await approved(deps);
-    paypal.fail.void = { status: 500, name: "INTERNAL_SERVER_ERROR", issue: "INTERNAL_SERVICE_ERROR" };
+    paypal.fail.void = { status: 403, name: "PERMISSION_DENIED", issue: "PERMISSION_DENIED" };
     await decideApproval(deps, link.token, "reject");
     for (let i = 0; i < 10; i++) {
       advance(3);
@@ -404,7 +404,7 @@ describe("recovery stays bounded, whatever PayPal answers", () => {
     paypal.fail.capture = DECLINED;
     ok(await requestPayment(deps, { mandateId: capped.id, runId: "run-1", source: "agent", cart: cart() }));
     delete paypal.fail.capture;
-    paypal.fail.void = UNAVAILABLE;
+    paypal.fail.void = { status: 403, name: "PERMISSION_DENIED", issue: "PERMISSION_DENIED" };
     await revokeMandate(deps, capped.id);
     await sweeps(deps, advance, 10);
     expect(paypal.calls.filter((c) => c.op === "void").length).toBeLessThanOrEqual(5);
@@ -427,17 +427,76 @@ describe("recovery stays bounded, whatever PayPal answers", () => {
   });
 
   it("a mandate's own sweep only applies that mandate's answered or expired approvals", async () => {
-    const { paypal, deps } = setup();
+    const { paypal, deps, advance } = setup();
     const a = await approved(deps);
     const b = await approved(deps);
     await decideApproval(deps, a.link.token, "reject").catch(() => {});
     paypal.fail.void = UNAVAILABLE;
     await decideApproval(deps, b.link.token, "reject");
     delete paypal.fail.void;
+    advance(5);
     const before = paypal.calls.filter((c) => c.op === "void").length;
     await sweepApprovals(deps, { mandateId: a.mandate.id });
     expect(paypal.calls.filter((c) => c.op === "void").length).toBe(before);
     await sweepApprovals(deps, { mandateId: b.mandate.id });
     expect(paypal.calls.filter((c) => c.op === "void").length).toBe(before + 1);
+  });
+});
+
+describe("an outage is ridden out, on every path", () => {
+  const UNAVAILABLE = { status: 503, name: "SERVICE_UNAVAILABLE", issue: "SERVICE_UNAVAILABLE" } as const;
+  const minuteSweeps = async (deps: ApprovalDeps, advance: (m: number) => unknown, minutes: number, lift?: () => void, liftAt = Infinity) => {
+    for (let m = 1; m <= minutes; m++) {
+      if (m === liftAt) lift?.();
+      advance(1);
+      await sweepApprovals(deps);
+    }
+  };
+
+  it("a hold placed during a 15-minute outage goes through within about half an hour, by itself", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.order = "network";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    await minuteSweeps(deps, advance, 35, () => delete paypal.fail.order, 15);
+    expect((await db.select().from(payments))[0]!.status).toBe("captured");
+    expect(new Set(paypal.calls.filter((c) => c.op === "order").map((c) => c.requestId)).size).toBe(1);
+  });
+
+  it("a release PayPal doesn't answer is retried, not given up, and the budget comes back", async () => {
+    const { paypal, deps, advance } = setup();
+    const { link, payment } = await approved(deps);
+    paypal.fail.void = UNAVAILABLE;
+    await decideApproval(deps, link.token, "reject");
+    await minuteSweeps(deps, advance, 40, () => delete paypal.fail.void, 10);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row!.status).toBe("voided");
+    expect(await reservation(payment.id)).toBe("released");
+  });
+
+  it("a hold PayPal expired by itself releases its budget on the next retry, without a webhook", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = UNAVAILABLE;
+    const { payment } = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
+    paypal.auths.get(payment.paypalAuthorizationId!)!.status = "EXPIRED";
+    advance(10);
+    await sweepApprovals(deps);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row!.status).toBe("voided");
+    expect(await reservation(payment.id)).toBe("released");
+  });
+
+  it("a row with a very long history of unanswered tries can't break the retry queue", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.order = "network";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    const [row] = await db.select().from(payments);
+    await db.insert(ledgerEvents).values(
+      Array.from({ length: 1100 }, () => ({ mandateId: mandate.id, mandateHash: row!.mandateHash, paymentId: row!.id, type: "resume.failed", createdAt: new Date("2026-11-03T15:00:00Z") })),
+    );
+    advance(10);
+    await expect(resumeStuckPayments(deps)).resolves.toBeDefined();
   });
 });

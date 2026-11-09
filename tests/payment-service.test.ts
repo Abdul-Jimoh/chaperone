@@ -281,13 +281,16 @@ describe("approvals", () => {
   });
 
   it("retries a void that failed after a reject", async () => {
-    const { paypal, deps } = setup();
+    const { paypal, deps, advance } = setup();
     const { result } = await pending(deps);
     const { token } = (await issueApprovalLink(deps, result.payment.id))!;
     paypal.fail.void = { status: 503, name: "SERVICE_UNAVAILABLE", issue: "SERVICE_UNAVAILABLE" };
     expect((await decideApproval(deps, token, "reject")).status).toBe("pending_approval");
 
     delete paypal.fail.void;
+    // No answer from PayPal is retried after a gap, not on the very next sweep.
+    expect(await sweepApprovals(deps)).toEqual([]);
+    advance(5 * 60_000);
     const [swept] = await sweepApprovals(deps);
     expect(swept!.status).toBe("voided");
     const voided = (await events(result.payment.id)).find((e) => e.type === "hold.voided");

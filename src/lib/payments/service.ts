@@ -411,7 +411,9 @@ export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: 
         .set({ status: previous, updatedAt: nowOf(deps) })
         .where(and(eq(payments.id, paymentId), eq(payments.status, "voiding")))
         .returning();
-      await logEvent(tx, payment, "void.failed", nowOf(deps), { detail: { reason, ...paypalDetail(error) } });
+      // Only a definite refusal (4xx) counts towards MAX_VOID_ATTEMPTS; no answer (an outage) is retried with the backoff.
+      const refused = error instanceof PayPalError && error.status < 500;
+      await logEvent(tx, payment, refused ? "void.failed" : "void.unanswered", nowOf(deps), { detail: { reason, ...paypalDetail(error) } });
       return back ?? getPayment(tx, paymentId);
     });
   }
@@ -444,15 +446,44 @@ export async function voidPayment(deps: PaymentDeps, paymentId: string, reason: 
  * voids after MAX_VOID_ATTEMPTS refusals, after which PayPal's own expiry of the hold releases it (the VOIDED webhook).
  * A row waiting out its gap or past a limit isn't picked, so it can't crowd out the others. Each failure is in the ledger.
  */
+const eventCount = (types: string[]) =>
+  sql`(select count(*) from ${ledgerEvents} where ${ledgerEvents.paymentId} = ${payments.id} and ${ledgerEvents.type} in (${sql.join(
+    types.map((t) => sql`${t}`),
+    sql`, `,
+  )}))`;
+
+/**
+ * True once a payment has waited out its retry gap: 2 minutes after a try PayPal didn't answer, then 4, 8, … up to six
+ * hours. Used by every automatic retry (holds, captures, voids), so an outage is ridden out without hammering PayPal.
+ */
+export function waitedOutBackoff(now: Date) {
+  const unanswered = eventCount(["resume.failed", "capture.unanswered", "void.unanswered"]);
+  return sql`${payments.updatedAt} <= ${now.toISOString()}::timestamptz - least(${BACKOFF_BASE_MINUTES} * power(2, least(${unanswered}, 10)), ${BACKOFF_MAX_MINUTES}) * interval '1 minute'`;
+}
+
+/** PayPal ended the hold itself (voided or expired it): nothing will be captured, so the budget comes back. */
+async function recordReleasedByPayPal(deps: PaymentDeps, payment: Payment, paypalStatus: string): Promise<Payment> {
+  return deps.db.transaction(async (tx) => {
+    const done = nowOf(deps);
+    const [voided] = await tx
+      .update(payments)
+      .set({ status: "voided", updatedAt: done })
+      .where(and(eq(payments.id, payment.id), eq(payments.status, payment.status)))
+      .returning();
+    if (!voided) return getPayment(tx, payment.id);
+    await releaseReservation(tx, payment.id, done);
+    await logEvent(tx, voided, "hold.voided", done, {
+      amountCents: voided.totalCents,
+      paypalResourceId: voided.paypalAuthorizationId ?? undefined,
+      detail: { reason: `paypal_${paypalStatus.toLowerCase()}` },
+    });
+    return voided;
+  });
+}
+
 export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?: string; limit?: number } = {}): Promise<Payment[]> {
   const before = new Date(nowOf(deps).getTime() - STALE_CLAIM_MS);
-  const events = (types: string[]) =>
-    sql`(select count(*) from ${ledgerEvents} where ${ledgerEvents.paymentId} = ${payments.id} and ${ledgerEvents.type} in (${sql.join(
-      types.map((t) => sql`${t}`),
-      sql`, `,
-    )}))`;
-  const unanswered = events(["resume.failed", "capture.unanswered"]);
-  const voidsRefused = events(["void.failed"]);
+  const voidsRefused = eventCount(["void.failed"]);
   const stuck = await deps.db
     .select()
     .from(payments)
@@ -460,9 +491,8 @@ export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?
       and(
         lte(payments.updatedAt, before),
         scope.mandateId ? eq(payments.mandateId, scope.mandateId) : undefined,
-        // No answer from PayPal (an outage): never given up, but tried less and less often, 2 minutes after the first
-        // failure, then 4, 8, … up to every six hours, so a payment caught in an outage recovers on its own.
-        sql`${payments.updatedAt} <= ${nowOf(deps).toISOString()}::timestamptz - least(${BACKOFF_BASE_MINUTES} * power(2, ${unanswered}), ${BACKOFF_MAX_MINUTES}) * interval '1 minute'`,
+        // No answer from PayPal (an outage) is never given up, only tried less and less often.
+        waitedOutBackoff(nowOf(deps)),
         or(
           inArray(payments.status, ["authorizing", "capturing"]),
           and(eq(payments.status, "voiding"), sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`),
@@ -479,13 +509,16 @@ export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?
   for (const payment of stuck) {
     try {
       if (payment.status === "authorizing") results.push(await placeHold(deps, payment));
-      else if (payment.status === "voiding") results.push(await voidPayment(deps, payment.id, "resumed", { resume: true }));
       else {
-        // Capturing or authorized: the money may have moved already (an answer lost, or a capture made elsewhere).
-        // PayPal's own record decides, before anything is captured again or voided.
+        // The hold exists: PayPal's own record decides what happens next. The money may have moved already (an answer
+        // lost, a capture made elsewhere), or PayPal may have ended the hold itself (voided, or expired after 29 days).
         const auth = await getAuthorization(deps.platform, payment.paypalAuthorizationId!);
-        const captured = ["CAPTURED", "PARTIALLY_CAPTURED"].includes(auth.status);
-        results.push(await capturePayment(deps, payment.id, { resume: true, captured }));
+        if (["VOIDED", "EXPIRED"].includes(auth.status)) results.push(await recordReleasedByPayPal(deps, payment, auth.status));
+        else if (payment.status === "voiding") results.push(await voidPayment(deps, payment.id, "resumed", { resume: true }));
+        else {
+          const captured = ["CAPTURED", "PARTIALLY_CAPTURED"].includes(auth.status);
+          results.push(await capturePayment(deps, payment.id, { resume: true, captured }));
+        }
       }
       // A try that changed nothing goes to the back of the queue too, so no row can hold the front forever.
       const after = results.at(-1);
