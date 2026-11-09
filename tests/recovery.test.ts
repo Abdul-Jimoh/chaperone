@@ -408,6 +408,15 @@ describe("recovery stays bounded, whatever PayPal answers", () => {
     expect((await db.select().from(payments).where(eq(payments.mandateId, other.id)))[0]!.status).toBe("captured");
   });
 
+  it("a revoke lists a payment PayPal hasn't confirmed as still open, once", async () => {
+    const { paypal, deps } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = UNAVAILABLE;
+    const { payment } = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
+    expect(payment.status).toBe("capturing");
+    expect((await revokeMandate(deps, mandate.id)).stillOpen).toEqual([payment.id]);
+  });
+
   it("a mandate's own sweep only applies that mandate's answered or expired approvals", async () => {
     const { paypal, deps } = setup();
     const a = await approved(deps);

@@ -547,6 +547,6 @@ export async function revokeMandate(deps: PaymentDeps, mandateId: string, by: "u
   return {
     alreadyRevoked,
     voided: results.filter((p) => p.status === "voided").map((p) => p.id),
-    stillOpen: [...results.filter((p) => p.status !== "voided").map((p) => p.id), ...inFlight.map((p) => p.id)],
+    stillOpen: [...new Set([...results.filter((p) => p.status !== "voided").map((p) => p.id), ...inFlight.map((p) => p.id)])],
   };
 }
