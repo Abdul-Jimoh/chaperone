@@ -2,28 +2,14 @@ import { asc, desc, eq, inArray } from "drizzle-orm";
 import type { Metadata } from "next";
 import { LedgerGrid, type LedgerRow } from "@/components/app/LedgerGrid";
 import { PageHeader } from "@/components/app/ui";
+import { budgetWindow } from "@/lib/app/ledger-rows";
 import { ledgerEvents, mandates, payments } from "@/db/schema";
 import { shopLabel } from "@/lib/payments/messages";
-import type { Policy } from "@/lib/policy/schema";
-import { windowStart } from "@/lib/policy/windows";
 import { serverDb } from "@/lib/server";
 import { requireData } from "../data";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Ledger" };
-
-/** The longest calendar window the mandate budgets (month, then week, then day), so the ledger can group spend by it. */
-function budgetWindow(policy: Policy, at: Date): { window: string; windowLimitCents: number | null } {
-  const budget = (["month", "week", "day"] as const).map((period) => policy.budgets.find((b) => b.period === period)).find(Boolean);
-  const tz = policy.timezone;
-  if (!budget) return { window: at.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: tz }), windowLimitCents: null };
-  const start = windowStart(budget.period, at, tz)!;
-  const label =
-    budget.period === "month"
-      ? at.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: tz })
-      : `${budget.period === "week" ? "Week of" : ""} ${start.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz })}`.trim();
-  return { window: label, windowLimitCents: budget.limitCents };
-}
 
 export default async function LedgerPage() {
   const { mandate } = await requireData();

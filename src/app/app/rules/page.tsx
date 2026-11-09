@@ -29,7 +29,9 @@ export default async function RulesPage() {
   const wallet = await walletOf(serverDb(), userId!);
   const { policy } = mandate;
   const active = mandate.status === "active";
-  const lastTrip = recent.find((p) => p.runId?.startsWith("agent-"))?.createdAt;
+  // A trip is a run of the in-app agent, or a day an MCP agent bought something (D27).
+  const lastTrip = recent.find((p) => p.runId?.startsWith("agent-") || p.source === "mcp")?.createdAt;
+  const due = lastTrip && policy.schedule ? nextTrip(lastTrip, policy.schedule) : null;
 
   return (
     <div className="space-y-12">
@@ -97,7 +99,7 @@ export default async function RulesPage() {
                 </div>
                 <div>
                   <dt className="text-[0.88rem] text-ink-2">Next trip due</dt>
-                  <dd className="mt-1 font-medium">{lastTrip ? day(nextTrip(lastTrip, policy.schedule)) : "Now"}</dd>
+                  <dd className="mt-1 font-medium">{due && due.getTime() > Date.now() ? day(due) : "Now"}</dd>
                 </div>
               </dl>
               <p className="mt-4 text-[0.88rem] leading-relaxed text-ink-2">

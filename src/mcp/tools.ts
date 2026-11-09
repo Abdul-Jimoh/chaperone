@@ -6,7 +6,7 @@ import { spentByPeriod, type Payment } from "@/lib/ledger/reserve";
 import { sweepApprovals } from "@/lib/payments/approvals";
 import { outcomeMessage, shopName } from "@/lib/payments/messages";
 import { requestPayment, revokeMandate, type PaymentDeps } from "@/lib/payments/service";
-import { describePolicy } from "@/lib/policy/describe";
+import { describePolicy, scheduleLine } from "@/lib/policy/describe";
 import { hit, purchaseChecks, refusal } from "@/lib/ratelimit";
 import { evaluate } from "@/lib/policy/evaluate";
 import { cartSchema, type Policy } from "@/lib/policy/schema";
@@ -191,7 +191,9 @@ export async function checkMandate(deps: PaymentDeps, mandateId: string, preview
       status: mandate.status,
       hash: mandate.hash,
       statement: mandate.statement,
-      rules: describePolicy(policy),
+      rules: describePolicy(policy).filter((line) => line !== scheduleLine(policy)),
+      // Shown to the agent so it shops on time; Chaperone doesn't refuse a payment off schedule.
+      schedule: scheduleLine(policy),
       expires_at: policy.expiresAt,
     },
     shops: policy.merchants.map((m) => ({ name: m.name, merchant_id: m.merchantId })),

@@ -6,7 +6,7 @@ import { sessionUserId } from "@/lib/app/session";
 import { requireEnv } from "@/lib/env";
 import { checkAuthorize } from "@/lib/oauth";
 import { endpoints } from "@/lib/oauth-http";
-import { describePolicy } from "@/lib/policy/describe";
+import { describePolicy, scheduleLine } from "@/lib/policy/describe";
 import { serverDb } from "@/lib/server";
 import { ConsentForm } from "./ConsentForm";
 
@@ -78,7 +78,9 @@ export default async function Authorize({ searchParams }: { searchParams: Promis
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <Card label="It can" title="Shop under these rules">
           <ul className="space-y-2 text-[0.95rem]">
-            {describePolicy(mandate.policy).map((line) => (
+            {describePolicy(mandate.policy)
+              .filter((line) => line !== scheduleLine(mandate.policy))
+              .map((line) => (
               <li key={line} className="flex gap-2.5">
                 <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
                 {line}

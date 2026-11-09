@@ -25,6 +25,7 @@ export const LIMITS = {
   purchasesPerClientDaily: { name: "purchases:client-day", max: 300, windowMs: DAY, message: "That's a lot of purchases from here for one day." },
   purchasesAll: { name: "purchases", max: 10_000, windowMs: DAY, message: "The shared sandbox wallet has reached today's purchase limit." },
   approvalLinksPerShopper: { name: "approval-links:shopper", max: 40, windowMs: HOUR, message: "That's a lot of approval links for one hour." },
+  walletLinksPerShopper: { name: "wallet-links:shopper", max: 10, windowMs: HOUR, message: "You've started linking PayPal a lot this hour." },
   agentKeysPerShopper: { name: "agent-keys:shopper", max: 5, windowMs: DAY, message: "You've created several agent keys today." },
   // Not shown to anyone: a full bucket just means the page skips the sweep this minute.
   pageSweep: { name: "sweep:page", max: 1, windowMs: 60_000, message: "" },

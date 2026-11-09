@@ -13,37 +13,12 @@ import {
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { useCallback, useMemo, useState } from "react";
+import { buildRows, HELD, PAID, type GridRow, type GroupBy, type LedgerRow } from "@/lib/app/ledger-rows";
 import { decisionLabel, StatusPill } from "./ui";
 
+export type { LedgerRow };
+
 ModuleRegistry.registerModules([AllCommunityModule]);
-
-export type LedgerRow = {
-  id: string;
-  at: string;
-  shop: string;
-  items: string;
-  totalCents: number;
-  decision: string;
-  rule: string;
-  status: string;
-  source: string;
-  mandateId: string;
-  mandateHash: string;
-  mandateLabel: string;
-  /** The budget window the payment counts against, e.g. "November 2026", and that window's limit. */
-  window: string;
-  windowLimitCents: number | null;
-  anomalies: string[];
-  events: { at: string; type: string; amountCents: number | null; detail: string }[];
-};
-
-type GroupBy = "none" | "shop" | "window" | "decision" | "mandate";
-
-// Full-width rows are how Community AG Grid shows group headers and per-order detail without the Enterprise modules.
-type GridRow =
-  | ({ kind: "payment"; group: string } & LedgerRow)
-  | { kind: "group"; id: string; group: string; title: string; count: number; paidCents: number; heldCents: number; limitCents: number | null; open: boolean }
-  | { kind: "detail"; id: string; group: string; parent: LedgerRow };
 
 const theme = themeQuartz.withParams({
   fontFamily: "inherit",
@@ -65,8 +40,6 @@ const theme = themeQuartz.withParams({
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" });
 
-const PAID = new Set(["captured"]);
-const HELD = new Set(["authorizing", "authorized", "pending_approval", "capturing"]);
 
 const GROUPS: { id: GroupBy; label: string }[] = [
   { id: "none", label: "No grouping" },
@@ -100,44 +73,6 @@ const EVENT_LABEL: Record<string, string> = {
   anomaly: "Anomaly flagged",
 };
 
-function groupKey(row: LedgerRow, by: GroupBy): string {
-  if (by === "shop") return row.shop;
-  if (by === "window") return row.window;
-  if (by === "decision") return decisionLabel(row.decision);
-  if (by === "mandate") return row.mandateLabel;
-  return "";
-}
-
-function buildRows(rows: LedgerRow[], by: GroupBy, closed: Set<string>, expanded: Set<string>): GridRow[] {
-  const out: GridRow[] = [];
-  const push = (row: LedgerRow, group: string) => {
-    out.push({ kind: "payment", group, ...row });
-    if (expanded.has(row.id)) out.push({ kind: "detail", id: `detail:${row.id}`, group, parent: row });
-  };
-  if (by === "none") {
-    rows.forEach((r) => push(r, ""));
-    return out;
-  }
-  const groups = new Map<string, LedgerRow[]>();
-  for (const r of rows) groups.set(groupKey(r, by), [...(groups.get(groupKey(r, by)) ?? []), r]);
-  for (const [title, members] of groups) {
-    const open = !closed.has(title);
-    out.push({
-      kind: "group",
-      id: `group:${title}`,
-      group: title,
-      title,
-      count: members.length,
-      paidCents: members.filter((m) => PAID.has(m.status)).reduce((s, m) => s + m.totalCents, 0),
-      heldCents: members.filter((m) => HELD.has(m.status)).reduce((s, m) => s + m.totalCents, 0),
-      limitCents: by === "window" ? members[0]!.windowLimitCents : null,
-      open,
-    });
-    if (open) members.forEach((m) => push(m, title));
-  }
-  return out;
-}
-
 export function LedgerGrid({ rows }: { rows: LedgerRow[] }) {
   const [by, setBy] = useState<GroupBy>("none");
   const [closed, setClosed] = useState<Set<string>>(new Set());
@@ -155,7 +90,7 @@ export function LedgerGrid({ rows }: { rows: LedgerRow[] }) {
     if (!q) return rows;
     return rows.filter((r) => [r.shop, r.items, r.rule, decisionLabel(r.decision), r.status, r.window, r.mandateHash, ...r.anomalies].join(" ").toLowerCase().includes(q));
   }, [rows, search]);
-  const gridRows = useMemo(() => buildRows(visible, by, closed, expanded), [visible, by, closed, expanded]);
+  const gridRows = useMemo(() => buildRows(visible, by, closed, expanded, decisionLabel), [visible, by, closed, expanded]);
 
   const columns = useMemo<ColDef<GridRow>[]>(
     () => [

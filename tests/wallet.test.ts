@@ -6,6 +6,7 @@ import { paymentMethods, users } from "@/db/schema";
 import { simulatePurchase, startDemoShopper, type DemoWorld } from "@/lib/app/demo";
 import { finishWalletLink, startWalletLink, walletOf, WalletLinkError } from "@/lib/app/wallet";
 import type { ApprovalDeps } from "@/lib/payments/approvals";
+import { createPayPalClient } from "@/lib/paypal/client";
 import { confirmExample } from "./support/demo";
 import { resetDb, testDb } from "./support/db";
 import { fakePayPal } from "./support/fake-paypal";
@@ -76,6 +77,27 @@ describe("linking your own PayPal (Vault v3 via the JS SDK v6 button)", () => {
     const { wallet, shopper } = await setup();
     const { setupToken, ticket } = await startWalletLink(wallet, shopper, "https://chaperone.test", new Date(Date.now() - 16 * 60_000));
     await expect(finishWalletLink(wallet, shopper, setupToken, ticket)).rejects.toBeInstanceOf(WalletLinkError);
+  });
+
+  it("never holds on a revoked wallet, even when it is the newest row", async () => {
+    const { paypal, deps, wallet, shopper } = await setup();
+    const { setupToken, ticket } = await startWalletLink(wallet, shopper, "https://chaperone.test");
+    await finishWalletLink(wallet, shopper, setupToken, ticket);
+    await db.update(paymentMethods).set({ createdAt: new Date(Date.now() + 60_000) }).where(eq(paymentMethods.paypalPaymentTokenId, "VAULT-DEMO"));
+    await confirmExample(db, world, shopper, jwk);
+    await simulatePurchase(deps, world, shopper, "allowed", randomUUID());
+    const order = paypal.calls.find((c) => c.op === "order")!.body as { payment_source: { paypal: { vault_id: string } } };
+    expect(order.payment_source.paypal.vault_id).toBe(`PT-${setupToken}`);
+  });
+
+  it("only hands the browser a token PayPal scoped to the client SDK", async () => {
+    const answer = (scope: string) => async () => Response.json({ access_token: "tok", expires_in: 900, scope });
+    const sdk = createPayPalClient({ clientId: "x", clientSecret: "y", fetch: answer("https://uri.paypal.com/services/payments/client-payments-eligibility Braintree:Vault") });
+    expect(await sdk.browserToken(["chaperone.test"])).toBe("tok");
+    const full = createPayPalClient({ clientId: "x", clientSecret: "y", fetch: answer("https://uri.paypal.com/services/payments/realtimepayment Braintree:Vault") });
+    await expect(full.browserToken(["chaperone.test"])).rejects.toThrow(/client SDK/);
+    const none = createPayPalClient({ clientId: "x", clientSecret: "y", fetch: answer("") });
+    await expect(none.browserToken(["chaperone.test"])).rejects.toThrow(/client SDK/);
   });
 
   it("finishing twice keeps one wallet and asks PayPal with the same request id", async () => {

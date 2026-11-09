@@ -28,7 +28,7 @@ import { ConfigError, requireEnv } from "@/lib/env";
 import { LlmBudgetExceededError } from "@/lib/llm/llm";
 import { shopLabel } from "@/lib/payments/messages";
 import { formatCents } from "@/lib/policy/describe";
-import { clientId, RateLimitedError } from "@/lib/ratelimit";
+import { clientId, enforce, LIMITS, RateLimitedError } from "@/lib/ratelimit";
 import { demoWorld, paymentDeps, serverDb, serverLlm } from "@/lib/server";
 
 /** Limits and ownership checks become a message on the page instead of an error screen. */
@@ -168,7 +168,9 @@ export type WalletStart = { ok: true; clientToken: string } | { ok: false; error
 export async function walletClientToken(): Promise<WalletStart> {
   await requireUser();
   try {
-    return { ok: true, clientToken: await paymentDeps().platform.browserToken() };
+    const host = new URL(await appOrigin()).hostname;
+    // PayPal refuses "localhost" as a domain, so a dev server gets an unbound token.
+    return { ok: true, clientToken: await paymentDeps().platform.browserToken(host.includes(".") ? [host] : []) };
   } catch {
     return { ok: false, error: "PayPal isn't reachable right now. The demo wallet still works." };
   }
@@ -176,6 +178,7 @@ export async function walletClientToken(): Promise<WalletStart> {
 
 export async function startWalletLinkAction(): Promise<{ setupToken: string; ticket: string }> {
   const userId = await requireUser();
+  await enforce(serverDb(), [[LIMITS.walletLinksPerShopper, userId]]);
   return startWalletLink(walletDeps(), userId, await appOrigin());
 }
 

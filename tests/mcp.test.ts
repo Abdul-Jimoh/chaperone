@@ -74,6 +74,9 @@ describe("MCP server", () => {
     ]);
     expect(data.budgets).toContainEqual({ period: "month", limit_cents: 15_000, used_cents: 0, remaining_cents: 15_000 });
     expect(data.mandate.rules).toContain("Ask me before anything over $40.00");
+    // The schedule is a reminder for the agent, not a rule Chaperone checks.
+    expect(data.mandate.rules.some((r: string) => /every 2 weeks/i.test(r))).toBe(false);
+    expect(data.mandate.schedule).toBe("Shop every 2 weeks");
   });
 
   it("previews a decision without reserving anything", async () => {
