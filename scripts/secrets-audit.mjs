@@ -1,4 +1,5 @@
-// Checks that no secret from .env.local appears in the git history (every commit, every branch, binary files too) or in
+// Checks that no secret from .env.local appears in the git history (every file version ever committed, binary files
+// too, and every commit message) or in
 // what a deployed site serves: the HTML of each page (which carries the server-rendered data passed to the browser) and
 // every script it loads. Prints variable names only, never values.
 //   node scripts/secrets-audit.mjs [https://www.chaperone.site] [--cookie "chp_session=..."]
@@ -32,10 +33,16 @@ if (existsSync("docs/private/agent-key.txt")) secrets.push({ name: "docs/private
 
 const leaks = (text) => secrets.filter((s) => s.probes.some((p) => text.includes(p))).map((s) => s.name);
 
-const history = execFileSync("git", ["log", "--all", "-p", "--binary", "--no-color"], { maxBuffer: 1 << 30 }).toString("latin1");
+// Every file content ever committed, read raw (a patch would show binary files compressed), plus all commit messages.
+const objects = execFileSync("git", ["rev-list", "--all", "--objects"], { maxBuffer: 1 << 30 }).toString().split("\n").map((l) => l.split(" ")[0]).filter(Boolean);
+const types = execFileSync("git", ["cat-file", "--batch-check=%(objectname) %(objecttype)"], { input: objects.join("\n"), maxBuffer: 1 << 30 }).toString();
+const blobs = types.split("\n").filter((l) => l.endsWith(" blob")).map((l) => l.split(" ")[0]);
+const contents = execFileSync("git", ["cat-file", "--batch"], { input: blobs.join("\n"), maxBuffer: 2 ** 31 }).toString("latin1");
+const messages = execFileSync("git", ["log", "--all", "--format=%B"], { maxBuffer: 1 << 30 }).toString();
+const history = `${contents}\n${messages}`;
 const commits = execFileSync("git", ["rev-list", "--all", "--count"]).toString().trim();
 const inHistory = leaks(history);
-console.log(`git history: ${commits} commits, ${secrets.length} secrets checked, found: ${inHistory.join(", ") || "none"}`);
+console.log(`git history: ${commits} commits, ${blobs.length} file versions, ${secrets.length} secrets checked, found: ${inHistory.join(", ") || "none"}`);
 
 const site = process.argv[2]?.startsWith("http") ? process.argv[2] : null;
 let inSite = [];

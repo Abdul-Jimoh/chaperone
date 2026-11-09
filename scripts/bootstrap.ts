@@ -36,7 +36,8 @@ const read = () => parseEnv(text) as Record<string, string>;
 /** Sets a variable only if it is missing or empty; values the user set are left alone. */
 const fill = (key: string, value: string, label: string) => {
   if (read()[key]) return ok(`${key} already set`);
-  const line = `${key}=${/[\s#'"{]/.test(value) ? `'${value}'` : value}`;
+  // Single quotes keep everything literal; a value that itself contains one goes in double quotes instead.
+  const line = `${key}=${!/[\s#'"{]/.test(value) ? value : value.includes("'") ? `"${value}"` : `'${value}'`}`;
   const existing = new RegExp(`^${key}=.*$`, "m");
   // A function replacement, so "$&" and friends in a value are written as they are.
   text = existing.test(text) ? text.replace(existing, () => line) : `${text.trimEnd()}\n${line}\n`;
