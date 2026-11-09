@@ -135,9 +135,9 @@ Each of these has a test.
 The ledger ([`LedgerGrid.tsx`](src/components/app/LedgerGrid.tsx)) uses AG Grid Community only, so the hosted demo needs no licence key:
 
 - **Grouping** by shop, budget window, decision or signed mandate. Group headers are full-width rows with totals, and a budget-window group shows its spend against that window's limit ([`buildRows`](src/lib/app/ledger-rows.ts#L60), [`budgetWindow`](src/lib/app/ledger-rows.ts#L40)). Budgets belong to one mandate, so a window is per mandate.
-- **Master/detail:** clicking a payment opens a full-width detail row with its trail: the evaluator's decision, the PayPal hold and its IDs, your answer, PayPal's webhooks, the capture or void ([`isFullWidthRow`](src/components/app/LedgerGrid.tsx#L225)).
-- **Sorting that keeps the structure:** `postSortRows` puts each group's header first and each detail row under its payment, whatever column is sorted ([`LedgerGrid.tsx`](src/components/app/LedgerGrid.tsx#L165)).
-- **Pinned totals:** paid, on hold, and blocked (never charged) ([`pinnedBottomRowData`](src/components/app/LedgerGrid.tsx#L222)).
+- **Master/detail:** clicking a payment opens a full-width detail row with its trail: the evaluator's decision, the PayPal hold and its IDs, your answer, PayPal's webhooks, the capture or void ([`isFullWidthRow`](src/components/app/LedgerGrid.tsx#L228)).
+- **Sorting that keeps the structure:** `postSortRows` puts each group's header first and each detail row under its payment, whatever column is sorted ([`LedgerGrid.tsx`](src/components/app/LedgerGrid.tsx#L168)).
+- **Pinned totals:** paid, on hold, and blocked (never charged) ([`pinnedBottomRowData`](src/components/app/LedgerGrid.tsx#L225)).
 - **Anomaly flags:** a hold whose payee or amount differs from what PayPal reports is flagged and never captured, and the row says why.
 - Every row carries the hash of the mandate it was checked against.
 

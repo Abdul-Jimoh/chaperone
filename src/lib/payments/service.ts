@@ -500,11 +500,15 @@ export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?
         or(
           inArray(payments.status, ["authorizing", "capturing"]),
           and(eq(payments.status, "voiding"), or(sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`, lte(payments.updatedAt, sixHoursAgo))),
-          // Waiting for an answer is the user's business, unless releasing it was already tried (a reject, expiry or
-          // revoke whose void PayPal refused): then it is retried like any release, and past the limit only looked up.
+          // Waiting for an answer is the user's business, unless it is already settled that the hold goes: the user
+          // rejected it, it timed out, or the mandate was revoked. Then it is released like any other hold (and past the
+          // void limit only looked up). Checked on the approval and mandate themselves, not on how the row got here.
           and(
             eq(payments.status, "pending_approval"),
-            sql`${voidsRefused} >= 1`,
+            or(
+              sql`exists (select 1 from ${approvals} where ${approvals.paymentId} = ${payments.id} and ${approvals.decidedAt} is not null and ${approvals.outcome} <> 'approved')`,
+              sql`exists (select 1 from ${mandates} where ${mandates.id} = ${payments.mandateId} and ${mandates.status} = 'revoked')`,
+            ),
             or(sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`, lte(payments.updatedAt, sixHoursAgo)),
           ),
           // Every way on from authorized can end in a void (revoked, or declined too often), so once voids are capped

@@ -503,6 +503,74 @@ describe("an outage is ridden out, on every path", () => {
     expect(await reservation(payment.id)).toBe("released");
   });
 
+  it("an allowed hold PayPal refused to release five times gives its budget back when PayPal expires it", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = DECLINED;
+    const { payment } = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
+    delete paypal.fail.capture;
+    paypal.fail.void = { status: 403, name: "PERMISSION_DENIED", issue: "PERMISSION_DENIED" };
+    await revokeMandate(deps, mandate.id);
+    await minuteSweeps(deps, advance, 60);
+    const voidsBefore = paypal.calls.filter((c) => c.op === "void").length;
+    expect(voidsBefore).toBeLessThanOrEqual(5);
+    paypal.auths.get(payment.paypalAuthorizationId!)!.status = "EXPIRED";
+    advance(7 * 60);
+    await sweepApprovals(deps);
+    expect((await db.select().from(payments).where(eq(payments.id, payment.id)))[0]!.status).toBe("voided");
+    expect(await reservation(payment.id)).toBe("released");
+    expect(paypal.calls.filter((c) => c.op === "void").length).toBe(voidsBefore);
+  });
+
+  it("a void stuck part-way past the limit is still looked up, and released when PayPal expires the hold", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const { payment } = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: bigCart() }));
+    await db.update(payments).set({ status: "voiding" }).where(eq(payments.id, payment.id));
+    await db.insert(ledgerEvents).values(
+      Array.from({ length: 5 }, () => ({ mandateId: mandate.id, mandateHash: payment.mandateHash, paymentId: payment.id, type: "void.failed", createdAt: new Date("2026-11-03T15:00:00Z") })),
+    );
+    paypal.auths.get(payment.paypalAuthorizationId!)!.status = "EXPIRED";
+    advance(7 * 60);
+    await resumeStuckPayments(deps);
+    expect((await db.select().from(payments).where(eq(payments.id, payment.id)))[0]!.status).toBe("voided");
+    expect(await reservation(payment.id)).toBe("released");
+    expect(paypal.calls.filter((c) => c.op === "void")).toHaveLength(0);
+  });
+
+  it("a hold PayPal denied releases its budget", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = UNAVAILABLE;
+    const { payment } = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
+    paypal.auths.get(payment.paypalAuthorizationId!)!.status = "DENIED";
+    advance(10);
+    await sweepApprovals(deps);
+    expect((await db.select().from(payments).where(eq(payments.id, payment.id)))[0]!.status).toBe("voided");
+    expect(await reservation(payment.id)).toBe("released");
+  });
+
+  it("a revoke during an outage releases a waiting hold once PayPal is back, not a day later", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const { payment } = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: bigCart() }));
+    paypal.fail.void = UNAVAILABLE;
+    await revokeMandate(deps, mandate.id);
+    await minuteSweeps(deps, advance, 40, () => delete paypal.fail.void, 10);
+    expect((await db.select().from(payments).where(eq(payments.id, payment.id)))[0]!.status).toBe("voided");
+    expect(await reservation(payment.id)).toBe("released");
+  });
+
+  it("never releases a hold the user still has to answer, whatever its history", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const { payment } = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: bigCart() }));
+    await db.insert(ledgerEvents).values({ mandateId: mandate.id, mandateHash: payment.mandateHash, paymentId: payment.id, type: "void.failed", createdAt: new Date("2026-11-03T15:00:00Z") });
+    await minuteSweeps(deps, advance, 60);
+    expect((await db.select().from(payments).where(eq(payments.id, payment.id)))[0]!.status).toBe("pending_approval");
+    expect(paypal.calls.filter((c) => c.op === "void")).toHaveLength(0);
+  });
+
   it("a void Chaperone can't send (no credentials for the shop) counts as refused, not as an outage", async () => {
     const { paypal, deps } = setup();
     const { link, payment } = await approved(deps);
