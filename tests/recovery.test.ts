@@ -4,7 +4,7 @@ import { ledgerEvents, payments, reservations } from "@/db/schema";
 import { approvalLinkFor, NotYoursError } from "@/lib/app/demo";
 import { decideApproval, issueApprovalLink, sweepApprovals, type ApprovalDeps } from "@/lib/payments/approvals";
 import { capturePayment, MAX_CAPTURE_ATTEMPTS, requestPayment, resumeStuckPayments, revokeMandate, type PaymentResult } from "@/lib/payments/service";
-import { checkMandate } from "@/mcp/tools";
+import { checkMandate, requestPaymentTool } from "@/mcp/tools";
 import { UnknownPayeeError } from "@/lib/paypal/payees";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, seedLinkedMandate, testDb } from "./support/db";
@@ -280,7 +280,7 @@ describe("recovery stays bounded", () => {
     // 30 minutes of outage: tried after 2, 4, 8 and 16 minute gaps, not on every sweep.
     expect(paypal.calls.filter((c) => c.op === "order").length).toBeLessThanOrEqual(1 + 4);
     delete paypal.fail.order;
-    advance(6 * 60);
+    advance(60);
     await sweepApprovals(deps);
     expect((await db.select().from(payments))[0]!.status).toBe("captured");
   });
@@ -453,6 +453,45 @@ describe("an outage is ridden out, on every path", () => {
       await sweepApprovals(deps);
     }
   };
+
+  it("an agent's payment request doesn't first resume older stuck payments, so it fits the route's time limit", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = UNAVAILABLE;
+    ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
+    delete paypal.fail.capture;
+    advance(10);
+    const before = paypal.calls.length;
+    await requestPaymentTool(deps, mandate.id, {
+      payee_merchant_id: SHOP_B,
+      items: [{ title: "Dry dog food, 5 kg", unit_price_cents: 1_500, quantity: 1, category: "dog-food" }],
+    });
+    // Its own hold only (an outside agent's claimed category is ignored, so the user is asked); the stuck capture waits
+    // for a read call or a sweep.
+    expect(paypal.calls.slice(before).map((c) => c.op)).toEqual(["order"]);
+    await checkMandate(deps, mandate.id);
+    expect((await db.select().from(payments).where(eq(payments.runId, "run-1")))[0]!.status).toBe("captured");
+  });
+
+  it("a hold whose answer was lost isn't sent again once PayPal may have forgotten the request id", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    // PayPal places the hold, but its answer never arrives; then nobody triggers a sweep overnight.
+    paypal.fail.order = "lost";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    delete paypal.fail.order;
+    paypal.forgetRequestIds();
+    advance(8 * 60);
+    await sweepApprovals(deps);
+    const [row] = await db.select().from(payments);
+    expect(row).toMatchObject({ status: "failed", anomalyFlags: ["possible_orphan_hold"] });
+    expect(await reservation(row!.id)).toBe("released");
+    expect(paypal.calls.filter((c) => c.op === "order")).toHaveLength(1);
+    // The cart can be bought again: a new purchase, not a replay of the lost one.
+    const again = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
+    expect(again.payment.id).not.toBe(row!.id);
+    expect(again.payment.status).toBe("captured");
+  });
 
   it("a hold placed during a 15-minute outage goes through within about half an hour, by itself", async () => {
     const { paypal, deps, advance } = setup();

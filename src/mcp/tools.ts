@@ -154,8 +154,10 @@ async function budgets(deps: PaymentDeps, mandateId: string, policy: Policy, now
 }
 
 // Timeouts are applied lazily, so every agent call also moves its own mandate's expired approvals on and frees their budget.
-async function sweep(deps: PaymentDeps, mandateId: string) {
-  await sweepApprovals(deps, { mandateId }).catch((error) => console.warn("approval sweep failed:", error));
+// A payment request only applies approvals (its budget must be current) and resumes nothing, so its own hold and capture
+// fit the route's time limit; reads also move up to two of the mandate's own stuck payments on.
+async function sweep(deps: PaymentDeps, mandateId: string, resumeLimit = 2) {
+  await sweepApprovals(deps, { mandateId, resumeLimit }).catch((error) => console.warn("approval sweep failed:", error));
 }
 
 export async function checkMandate(deps: PaymentDeps, mandateId: string, preview?: CartInput, shopping?: Shopping) {
@@ -245,7 +247,7 @@ export async function requestPaymentTool(deps: PaymentDeps, mandateId: string, i
   if ("issues" in resolved) {
     return { error: "invalid_cart", issues: resolved.issues, message: "The cart is malformed; nothing was recorded or charged." };
   }
-  await sweep(deps, mandateId);
+  await sweep(deps, mandateId, 0);
   const now = deps.clock?.() ?? new Date();
   const runId = mcpRunId(mandateId, now, mandate.policy.timezone);
   const result = await requestPayment(deps, { mandateId, runId, source: "mcp", cart: resolved.cart });

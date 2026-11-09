@@ -172,6 +172,7 @@ export async function sweepApprovals(deps: PaymentDeps, scope: { mandateId?: str
     results.push(await voidPayment(deps, payment.id, outcome === "rejected" ? "rejected" : "approval_expired"));
   }
   // A mandate's own calls move only its own stuck payments, a few at a time.
-  results.push(...(await resumeStuckPayments(deps, scope.mandateId ? { mandateId: scope.mandateId, limit: 2 } : { limit: scope.resumeLimit })));
+  const limit = scope.resumeLimit ?? (scope.mandateId ? 2 : undefined);
+  if (limit !== 0) results.push(...(await resumeStuckPayments(deps, scope.mandateId ? { mandateId: scope.mandateId, limit } : { limit })));
   return results;
 }

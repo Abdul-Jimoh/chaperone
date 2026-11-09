@@ -54,6 +54,7 @@ const FLAG_LABEL: Record<string, string> = {
   payee_missing: "PayPal didn't report the shop",
   amount_mismatch: "Held amount differs",
   capture_failed: "Capture kept failing",
+  possible_orphan_hold: "PayPal may hold an unused authorization; it expires by itself",
 };
 
 const EVENT_LABEL: Record<string, string> = {
@@ -62,6 +63,7 @@ const EVENT_LABEL: Record<string, string> = {
   "decision.deny": "Evaluator: denied",
   "hold.placed": "PayPal hold placed",
   "hold.failed": "PayPal hold failed",
+  "hold.abandoned": "No answer from PayPal in time: not retried",
   "hold.voided": "Hold cancelled",
   "approval.requested": "Waiting for the user",
   "approval.approved": "User approved",

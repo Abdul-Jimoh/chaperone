@@ -51,6 +51,8 @@ const STALE_CLAIM_MS = 2 * 60 * 1000;
 
 // After this many declined captures the hold is released, so its budget isn't locked until PayPal expires it.
 export const MAX_CAPTURE_ATTEMPTS = 3;
+/** Well inside how long PayPal remembers an Orders PayPal-Request-Id (said to be about six hours). */
+export const HOLD_REQUEST_WINDOW_MS = 3 * 60 * 60_000;
 const BACKOFF_BASE_MINUTES = 2;
 const BACKOFF_MAX_MINUTES = 6 * 60;
 export const MAX_VOID_ATTEMPTS = 5;
@@ -139,12 +141,12 @@ function capturable(payment: Payment): boolean {
   return payment.status === "authorized" && payment.decision === "allow" && payment.anomalyFlags.length === 0;
 }
 
-async function failAuthorizing(deps: PaymentDeps, payment: Payment, type: string, detail: Record<string, unknown>) {
+async function failAuthorizing(deps: PaymentDeps, payment: Payment, type: string, detail: Record<string, unknown>, flags: string[] = []) {
   const now = nowOf(deps);
   return deps.db.transaction(async (tx) => {
     const [failed] = await tx
       .update(payments)
-      .set({ status: "failed", updatedAt: now })
+      .set({ status: "failed", updatedAt: now, ...(flags.length ? { anomalyFlags: [...payment.anomalyFlags, ...flags] } : {}) })
       .where(and(eq(payments.id, payment.id), eq(payments.status, "authorizing")))
       .returning();
     if (!failed) return getPayment(tx, payment.id);
@@ -155,6 +157,13 @@ async function failAuthorizing(deps: PaymentDeps, payment: Payment, type: string
 }
 
 async function placeHold(deps: PaymentDeps, payment: Payment): Promise<Payment> {
+  // PayPal only remembers a PayPal-Request-Id for a while. Past that, sending the order again could place a second
+  // hold if the first one went through and its answer was lost. So it isn't sent: the payment fails, the budget comes
+  // back, and the ledger flags that PayPal may hold an unused authorization, which expires by itself (Chaperone can't
+  // capture a hold it never got the id of).
+  if (nowOf(deps).getTime() - payment.createdAt.getTime() > HOLD_REQUEST_WINDOW_MS) {
+    return failAuthorizing(deps, payment, "hold.abandoned", { reason: "no answer from PayPal within the request-id window" }, ["possible_orphan_hold"]);
+  }
   const [method] = await deps.db
     .select({ vaultId: paymentMethods.paypalPaymentTokenId })
     .from(paymentMethods)
