@@ -206,3 +206,24 @@ describe("shopping agent, replaying a recorded Haiku run", () => {
     expect(paid.every((p) => p.runId === "run-recorded-1" && p.mandateHash)).toBe(true);
   });
 });
+
+describe("shopping agent and its own stuck payments", () => {
+  it("pays without first resuming older stuck payments, so a run fits the route's time limit", async () => {
+    const paypal = fakePayPal({ "shop-a-app": SHOP_A, "shop-b-app": SHOP_B });
+    const paymentDeps: PaymentDeps = { db, platform: paypal.platform, payees: paypal.payees };
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const earlier = await requestPayment(paymentDeps, { mandateId: mandate.id, runId: "run-earlier", source: "agent", cart: cart() });
+    if (!earlier.ok) throw new Error("setup");
+    await db.update(payments).set({ status: "capturing", updatedAt: new Date(Date.now() - 60 * 60_000) }).where(eq(payments.id, earlier.payment.id));
+    const { transport } = scriptedTransport(
+      [
+        { tools: [{ name: "search_products", input: { query: "ground coffee" } }] },
+        { tools: [{ name: "request_payment", input: { payee_merchant_id: SHOP_A, items: [{ listing_id: "L1", quantity: 1 }] } }] },
+        { text: "Bought coffee." },
+      ],
+      byTitle,
+    );
+    await runShoppingAgent({ llm: createLlm({ db, transport, budgetUsd: 1.5 }), search, payments: paymentDeps, shops }, { mandateId: mandate.id, goal: "Restock coffee.", runId: "run-later" });
+    expect((await db.select().from(payments).where(eq(payments.id, earlier.payment.id)))[0]!.status).toBe("capturing");
+  });
+});

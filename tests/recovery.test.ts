@@ -454,6 +454,20 @@ describe("an outage is ridden out, on every path", () => {
     }
   };
 
+  it("an agent resending the same cart after the window doesn't place a second hold either", async () => {
+    const { paypal, deps, advance } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.order = "lost";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    delete paypal.fail.order;
+    paypal.forgetRequestIds();
+    advance(4 * 60);
+    // No sweep in between: the replay itself must not send the order again.
+    const replay = ok(await requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() }));
+    expect(replay.payment).toMatchObject({ status: "failed", anomalyFlags: ["possible_orphan_hold"] });
+    expect(paypal.calls.filter((c) => c.op === "order")).toHaveLength(1);
+  });
+
   it("an agent's payment request doesn't first resume older stuck payments, so it fits the route's time limit", async () => {
     const { paypal, deps, advance } = setup();
     const mandate = await seedLinkedMandate(db, samplePolicy());

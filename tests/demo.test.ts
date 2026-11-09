@@ -68,6 +68,17 @@ describe("judge-mode demo", () => {
     expect(await walletOf(db, id)).toEqual({ kind: "none" });
   });
 
+  it("a test cart doesn't first resume the visitor's own stuck payments", async () => {
+    await seedTemplateWallet();
+    const { deps } = setup();
+    const id = await shopper();
+    const stuck = await simulatePurchase(deps, world, id, "allowed", randomUUID());
+    if (!stuck.ok) throw new Error("setup");
+    await db.update(payments).set({ status: "capturing", updatedAt: new Date(Date.now() - 60 * 60_000) }).where(eq(payments.id, stuck.payment.id));
+    await simulatePurchase(deps, world, id, "ask", randomUUID());
+    expect((await db.select().from(payments).where(eq(payments.id, stuck.payment.id)))[0]!.status).toBe("capturing");
+  });
+
   it("a visitor's test cart only sweeps that visitor's own expired approvals", async () => {
     await seedTemplateWallet();
     const { deps } = setup();
