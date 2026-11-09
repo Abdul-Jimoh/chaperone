@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { exportJWK, generateKeyPair, type JWK } from "jose";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { ledgerEvents, mandates, paymentMethods, payments, users } from "@/db/schema";
+import { approvals, ledgerEvents, mandates, paymentMethods, payments, users } from "@/db/schema";
 import {
   approvalLinkFor,
   dashboard,
@@ -66,6 +66,17 @@ describe("judge-mode demo", () => {
   it("starts without a wallet when no shared one is seeded, so the shopper links their own", async () => {
     const id = await startDemoShopper(db, "test-client");
     expect(await walletOf(db, id)).toEqual({ kind: "none" });
+  });
+
+  it("a visitor's test cart only sweeps that visitor's own expired approvals", async () => {
+    await seedTemplateWallet();
+    const { deps } = setup();
+    const [a, b] = [await shopper(), await shopper()];
+    const waiting = await simulatePurchase(deps, world, b, "ask", randomUUID());
+    if (!waiting.ok) throw new Error("setup");
+    await db.update(approvals).set({ expiresAt: new Date(Date.now() - 60_000) }).where(eq(approvals.paymentId, waiting.payment.id));
+    await simulatePurchase(deps, world, a, "allowed", randomUUID());
+    expect((await db.select().from(payments).where(eq(payments.id, waiting.payment.id)))[0]!.status).toBe("pending_approval");
   });
 
   it("gives each visitor their own shopper, mandate and ledger, sharing only the sandbox wallet", async () => {

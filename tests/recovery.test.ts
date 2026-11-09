@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { ledgerEvents, payments, reservations } from "@/db/schema";
 import { approvalLinkFor, NotYoursError } from "@/lib/app/demo";
 import { decideApproval, issueApprovalLink, sweepApprovals, type ApprovalDeps } from "@/lib/payments/approvals";
-import { MAX_CAPTURE_ATTEMPTS, requestPayment, resumeStuckPayments, revokeMandate, type PaymentResult } from "@/lib/payments/service";
+import { capturePayment, MAX_CAPTURE_ATTEMPTS, requestPayment, resumeStuckPayments, revokeMandate, type PaymentResult } from "@/lib/payments/service";
 import { checkMandate } from "@/mcp/tools";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, seedLinkedMandate, testDb } from "./support/db";
@@ -374,6 +374,38 @@ describe("recovery stays bounded, whatever PayPal answers", () => {
     await resumeStuckPayments(deps, { limit: 1 });
     expect((await db.select().from(payments).where(eq(payments.mandateId, other.id)))[0]!.status).toBe("captured");
     expect(paypal.calls.filter((c) => c.op === "void")).toHaveLength(0);
+  });
+
+  it("a capture PayPal answers 'already captured' is read back and recorded", async () => {
+    const { paypal, deps } = setup();
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = "lost";
+    await expect(requestPayment(deps, { mandateId: mandate.id, runId: "run-1", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    delete paypal.fail.capture;
+    paypal.forgetRequestIds();
+    const [row] = await db.select().from(payments);
+    await db.update(payments).set({ status: "authorized" }).where(eq(payments.id, row!.id));
+    expect(await capturePayment(deps, row!.id)).toMatchObject({ status: "captured", paypalCaptureId: "CAP-AUTH1" });
+    expect(await reservation(row!.id)).toBe("captured");
+  });
+
+  it("a revoked hold PayPal won't release stops being tried and doesn't hold the front of the queue", async () => {
+    const { paypal, deps, advance } = setup();
+    const capped = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.capture = DECLINED;
+    ok(await requestPayment(deps, { mandateId: capped.id, runId: "run-1", source: "agent", cart: cart() }));
+    delete paypal.fail.capture;
+    paypal.fail.void = UNAVAILABLE;
+    await revokeMandate(deps, capped.id);
+    await sweeps(deps, advance, 10);
+    expect(paypal.calls.filter((c) => c.op === "void").length).toBeLessThanOrEqual(5);
+    const other = await seedLinkedMandate(db, samplePolicy());
+    paypal.fail.order = "network";
+    await expect(requestPayment(deps, { mandateId: other.id, runId: "run-2", source: "agent", cart: cart() })).rejects.toThrow("fetch failed");
+    delete paypal.fail.order;
+    advance(3);
+    await resumeStuckPayments(deps, { limit: 1 });
+    expect((await db.select().from(payments).where(eq(payments.mandateId, other.id)))[0]!.status).toBe("captured");
   });
 
   it("a mandate's own sweep only applies that mandate's answered or expired approvals", async () => {

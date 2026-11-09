@@ -250,12 +250,10 @@ async function placeHold(deps: PaymentDeps, payment: Payment): Promise<Payment> 
 export class CaptureNotAllowedError extends Error {}
 
 /**
- * Captures a hold. Allowed only for an allowed payment, or a needs_approval payment the user approved,
- * with no anomaly flags, on a mandate that is still active.
- */
-/**
+ * Captures a hold. Allowed only for an allowed payment, or a needs_approval payment the user approved, with no anomaly
+ * flags, on a mandate that is still active, and fewer than MAX_CAPTURE_ATTEMPTS declines so far.
  * `resume` picks up a capture interrupted after its claim. `captured` says PayPal already reports the authorization as
- * captured: the money has moved, so the capture is recorded even if the mandate was revoked since.
+ * captured: the money has moved, so that capture is read back and recorded whatever the rules above say.
  */
 export async function capturePayment(deps: PaymentDeps, paymentId: string, options: { resume?: boolean; captured?: boolean } = {}): Promise<Payment> {
   const now = nowOf(deps);
@@ -453,7 +451,6 @@ export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?
     )}))`;
   const unanswered = events(["resume.failed", "capture.unanswered"]);
   const voidsRefused = events(["void.failed"]);
-  const declines = events(["capture.failed"]);
   const stuck = await deps.db
     .select()
     .from(payments)
@@ -465,11 +462,9 @@ export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?
         or(
           inArray(payments.status, ["authorizing", "capturing"]),
           and(eq(payments.status, "voiding"), sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`),
-          and(
-            eq(payments.status, "authorized"),
-            sql`cardinality(${payments.anomalyFlags}) = 0`,
-            or(sql`${declines} < ${MAX_CAPTURE_ATTEMPTS}`, sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`),
-          ),
+          // Every way on from authorized can end in a void (revoked, or declined too often), so once voids are capped
+          // the row is left for PayPal to release when the authorization expires.
+          and(eq(payments.status, "authorized"), sql`cardinality(${payments.anomalyFlags}) = 0`, sql`${voidsRefused} < ${MAX_VOID_ATTEMPTS}`),
         ),
       ),
     )
@@ -487,6 +482,11 @@ export async function resumeStuckPayments(deps: PaymentDeps, scope: { mandateId?
         const auth = await getAuthorization(deps.platform, payment.paypalAuthorizationId!);
         const captured = ["CAPTURED", "PARTIALLY_CAPTURED"].includes(auth.status);
         results.push(await capturePayment(deps, payment.id, { resume: true, captured }));
+      }
+      // A try that changed nothing goes to the back of the queue too, so no row can hold the front forever.
+      const after = results.at(-1);
+      if (after && after.status === payment.status && after.updatedAt.getTime() === payment.updatedAt.getTime()) {
+        await deps.db.update(payments).set({ updatedAt: nowOf(deps) }).where(and(eq(payments.id, payment.id), eq(payments.status, payment.status)));
       }
     } catch (error) {
       console.warn(`resuming payment ${payment.id} failed:`, error instanceof Error ? error.message : error);
@@ -538,9 +538,15 @@ export async function revokeMandate(deps: PaymentDeps, mandateId: string, by: "u
   });
 
   const results = await Promise.all(open.map((p) => voidPayment(deps, p.id, "mandate_revoked")));
+  // Payments part-way through (a hold being placed, a capture or void PayPal hasn't confirmed) aren't voided here;
+  // they settle on their own (a hold placed after a revoke is voided). They are reported as still open meanwhile.
+  const inFlight = await deps.db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(and(eq(payments.mandateId, mandateId), inArray(payments.status, ["authorizing", "capturing", "voiding"])));
   return {
     alreadyRevoked,
     voided: results.filter((p) => p.status === "voided").map((p) => p.id),
-    stillOpen: results.filter((p) => p.status !== "voided").map((p) => p.id),
+    stillOpen: [...results.filter((p) => p.status !== "voided").map((p) => p.id), ...inFlight.map((p) => p.id)],
   };
 }

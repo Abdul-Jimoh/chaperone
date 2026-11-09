@@ -123,6 +123,15 @@ describe("linking your own PayPal (Vault v3 via the JS SDK v6 button)", () => {
     await expect(slow.accessToken()).rejects.toThrow(/timeout|aborted/i);
   });
 
+  it("a PayPal API call that doesn't answer in time also gives up", async () => {
+    const fetch: typeof globalThis.fetch = (url, init) =>
+      String(url).endsWith("/v1/oauth2/token")
+        ? Promise.resolve(Response.json({ access_token: "t", expires_in: 3600 }))
+        : new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)));
+    const slow = createPayPalClient({ clientId: "x", clientSecret: "y", fetch, timeoutMs: 50 });
+    await expect(slow.request("/v2/checkout/orders/ORDER1")).rejects.toThrow(/timeout|aborted/i);
+  });
+
   it("finishing twice keeps one wallet and asks PayPal with the same request id", async () => {
     const { paypal, wallet, shopper } = await setup();
     const { setupToken, ticket } = await startWalletLink(wallet, shopper, "https://chaperone.test");

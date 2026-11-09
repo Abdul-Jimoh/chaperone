@@ -1,3 +1,4 @@
+import { and, eq, inArray } from "drizzle-orm";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LinkPayPal } from "@/components/app/LinkPayPal";
@@ -6,6 +7,7 @@ import { Meter, PageHeader, Section } from "@/components/app/ui";
 import { walletOf } from "@/lib/app/wallet";
 import { describePolicy, formatCents, scheduleLine } from "@/lib/policy/describe";
 import type { Policy } from "@/lib/policy/schema";
+import { payments } from "@/db/schema";
 import { serverDb } from "@/lib/server";
 import { appData, requireData } from "../data";
 
@@ -31,8 +33,16 @@ export default async function RulesPage() {
   const active = mandate.status === "active";
   // A trip is a run of the in-app agent, or a day an MCP agent bought something (D27).
   const lastTrip = recent.find((p) => p.runId?.startsWith("agent-") || p.source === "mcp")?.createdAt;
-  // After a revoke, a hold PayPal wouldn't release stays open until its authorization expires; say so.
-  const stillHeld = active ? [] : recent.filter((p) => ["authorizing", "authorized", "pending_approval", "capturing", "voiding"].includes(p.status));
+  // After a revoke, say what PayPal hasn't settled yet: a hold it wouldn't release stays open until the authorization
+  // expires; a capture or hold it hasn't confirmed settles either way, and the Ledger shows which.
+  const unsettled = active
+    ? []
+    : await serverDb()
+        .select({ status: payments.status, totalCents: payments.totalCents })
+        .from(payments)
+        .where(and(eq(payments.mandateId, mandate.id), inArray(payments.status, ["authorizing", "authorized", "pending_approval", "capturing", "voiding"])));
+  const stillHeld = unsettled.filter((p) => p.status !== "capturing" && p.status !== "authorizing");
+  const unconfirmed = unsettled.length - stillHeld.length;
   const due = lastTrip && policy.schedule ? nextTrip(lastTrip, policy.schedule) : null;
 
   return (
@@ -50,14 +60,23 @@ export default async function RulesPage() {
         checks every cart against exactly this.
       </PageHeader>
 
-      {stillHeld.length > 0 && (
-        <p role="status" className="rounded-xl bg-paper-2 p-4 text-[0.95rem] leading-relaxed">
-          <span className="font-medium">
-            {stillHeld.length === 1 ? "1 hold" : `${stillHeld.length} holds`} ({formatCents(stillHeld.reduce((sum, p) => sum + p.totalCents, 0))}) not released yet.
-          </span>{" "}
-          PayPal didn&apos;t confirm the release. Chaperone won&apos;t capture it; the money comes back when PayPal&apos;s authorization expires, and the Ledger shows
-          each attempt.
-        </p>
+      {unsettled.length > 0 && (
+        <div role="status" className="space-y-1 rounded-xl bg-paper-2 p-4 text-[0.95rem] leading-relaxed">
+          {stillHeld.length > 0 && (
+            <p>
+              <span className="font-medium">
+                {stillHeld.length === 1 ? "1 hold" : `${stillHeld.length} holds`} ({formatCents(stillHeld.reduce((sum, p) => sum + p.totalCents, 0))}) not released yet.
+              </span>{" "}
+              PayPal hasn&apos;t confirmed the release. Chaperone won&apos;t capture them; PayPal releases them when the authorization expires.
+            </p>
+          )}
+          {unconfirmed > 0 && (
+            <p>
+              <span className="font-medium">{unconfirmed === 1 ? "1 payment" : `${unconfirmed} payments`} waiting for PayPal to confirm.</span> They were in
+              progress when you revoked; the Ledger shows how each one settles.
+            </p>
+          )}
+        </div>
       )}
 
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
