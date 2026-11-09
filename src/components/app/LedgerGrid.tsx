@@ -73,6 +73,14 @@ const EVENT_LABEL: Record<string, string> = {
   anomaly: "Anomaly flagged",
 };
 
+// Webhook events are stored as "paypal." + PayPal's event type, e.g. paypal.payment.capture.completed.
+function eventLabel(type: string): string {
+  if (EVENT_LABEL[type]) return EVENT_LABEL[type];
+  if (!type.startsWith("paypal.")) return type;
+  const words = type.slice("paypal.".length).replace(/^payment\./, "").replace(/^checkout\./, "").split(".").join(" ");
+  return `PayPal webhook: ${words}`;
+}
+
 export function LedgerGrid({ rows }: { rows: LedgerRow[] }) {
   const [by, setBy] = useState<GroupBy>("none");
   const [closed, setClosed] = useState<Set<string>>(new Set());
@@ -291,7 +299,7 @@ function Detail({ row }: { row: LedgerRow }) {
       <ol className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-3">
         {row.events.map((e, i) => (
           <li key={i} className="border-l-2 border-line-strong pl-3">
-            <p className="text-[0.9rem] leading-5 font-medium">{EVENT_LABEL[e.type] ?? e.type}</p>
+            <p className="text-[0.9rem] leading-5 font-medium">{eventLabel(e.type)}</p>
             <p className="text-[0.8rem] leading-5 text-ink-2">
               {when(e.at)}
               {e.amountCents != null ? ` · ${money(e.amountCents)}` : ""}
