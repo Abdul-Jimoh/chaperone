@@ -1,14 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { payments } from "@/db/schema";
+import { asc, eq } from "drizzle-orm";
+import { approvals, ledgerEvents, payments } from "@/db/schema";
 import { replaySearch, type Listing, type ProductSearch } from "@/lib/agent/catalog";
 import { runShoppingAgent } from "@/lib/agent/run";
 import { createLlm } from "@/lib/llm/llm";
 import { replayTransport } from "@/lib/llm/transport";
-import type { PaymentDeps } from "@/lib/payments/service";
+import { requestPayment, type PaymentDeps } from "@/lib/payments/service";
 import type { DemoShop } from "@/lib/shops";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, seedLinkedMandate, testDb } from "./support/db";
-import { ROGUE, SHOP_A, SHOP_B, samplePolicy } from "./support/fixtures";
+import { cart, ROGUE, SHOP_A, SHOP_B, samplePolicy } from "./support/fixtures";
 import {
   CHANNEL3_FIXTURE_DIR,
   DEMO_AGENT_GOAL,
@@ -112,6 +113,44 @@ describe("shopping agent", () => {
     const searchForever = Array.from({ length: 10 }, () => ({ tools: [{ name: "search_products", input: { query: "ground coffee" } }] }));
     const { result } = await run(searchForever);
     expect(result).toMatchObject({ stopped: "turn_limit", turns: 8 });
+  });
+});
+
+describe("shopping agent and expired approvals", () => {
+  it("releases approvals nobody answered before its next payment is decided", async () => {
+    const paypal = fakePayPal({ "shop-a-app": SHOP_A, "shop-b-app": SHOP_B });
+    const paymentDeps: PaymentDeps = { db, platform: paypal.platform, payees: paypal.payees };
+    const mandate = await seedLinkedMandate(db, samplePolicy());
+    const waiting = await requestPayment(paymentDeps, {
+      mandateId: mandate.id,
+      runId: "run-earlier",
+      source: "agent",
+      cart: cart({ payeeMerchantId: SHOP_B, items: [{ productId: "kibble-12kg", title: "Dry dog food, 12 kg", unitPriceCents: 5_000, quantity: 1, category: "dog-food" }] }),
+    });
+    if (!waiting.ok) throw new Error("setup");
+    expect(waiting.payment.status).toBe("pending_approval");
+    await db.update(approvals).set({ expiresAt: new Date(Date.now() - 60_000) }).where(eq(approvals.paymentId, waiting.payment.id));
+
+    const { transport } = scriptedTransport(
+      [
+        { tools: [{ name: "search_products", input: { query: "ground coffee" } }] },
+        { tools: [{ name: "request_payment", input: { payee_merchant_id: SHOP_A, items: [{ listing_id: "L1", quantity: 1 }] } }] },
+        { text: "Bought coffee." },
+      ],
+      byTitle,
+    );
+    await runShoppingAgent(
+      { llm: createLlm({ db, transport, budgetUsd: 1.5 }), search, payments: paymentDeps, shops },
+      { mandateId: mandate.id, goal: "Restock coffee.", runId: "run-test-2" },
+    );
+
+    const [old] = await db.select().from(payments).where(eq(payments.id, waiting.payment.id));
+    expect(old!.status).toBe("voided");
+    const events = await db.select().from(ledgerEvents).orderBy(asc(ledgerEvents.createdAt), asc(ledgerEvents.id));
+    const expired = events.findIndex((e) => e.type === "approval.expired");
+    const decided = events.findIndex((e) => e.type === "decision.allow");
+    expect(expired).toBeGreaterThanOrEqual(0);
+    expect(expired).toBeLessThan(decided);
   });
 });
 
