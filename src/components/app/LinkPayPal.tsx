@@ -101,15 +101,19 @@ export function LinkPayPal({ wallet }: { wallet: Wallet }) {
             Your own PayPal sandbox account is linked: <span className="font-medium text-ink">{linked}</span>. Holds are placed on it from now on.
           </span>
         </p>
-      ) : (
+      ) : wallet.kind === "demo" ? (
         <p className="flex items-start gap-3 leading-relaxed text-ink-2">
           <Tick />
           This demo starts with a PayPal sandbox buyer whose wallet is already saved, so the agent can pay while you&apos;re away. Every payment still
           needs your rules to pass.
         </p>
+      ) : (
+        <p className="leading-relaxed text-ink-2">
+          Link a PayPal sandbox personal account once, so the agent can pay while you&apos;re away. Every payment still needs your rules to pass.
+        </p>
       )}
       <div className="mt-5 border-t border-line pt-4">
-        <p className="text-[0.95rem] text-ink-2">{linked ? "Link a different sandbox account:" : "Or link your own PayPal sandbox account:"}</p>
+        <p className="text-[0.95rem] text-ink-2">{linked ? "Link a different sandbox account:" : wallet.kind === "demo" ? "Or link your own PayPal sandbox account:" : "Link it with PayPal:"}</p>
         <div ref={slot} className={`mt-3 max-w-sm ${state.step === "working" ? "pointer-events-none opacity-60" : ""}`} aria-busy={state.step !== "ready"} />
         {state.step === "loading" && <p className="mt-3 h-11 animate-pulse rounded-full bg-paper-2" aria-hidden />}
         {(state.step === "failed" || state.step === "unavailable") && (

@@ -19,6 +19,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "progress": "node scripts/progress.mjs",
+    "bootstrap": "tsx scripts/bootstrap.ts",
+    "dev:local": "tsx scripts/dev-local.ts",
     "lint:fix": "eslint . --fix && node scripts/check-tailwind.mjs --fix",
     "build:check": "NEXT_DIST_DIR=.next-verify next build"
   },

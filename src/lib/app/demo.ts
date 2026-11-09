@@ -27,7 +27,6 @@ export type DemoWorld = { shops: DemoShop[]; rogueMerchantId: string };
 /** The seeded shopper whose vaulted sandbox wallet every judge-mode shopper borrows (scripts/seed.ts). */
 const TEMPLATE_EMAIL = "demo-shopper@example.com";
 
-export class DemoNotReadyError extends Error {}
 export class NotYoursError extends Error {}
 
 /**
@@ -42,7 +41,6 @@ export async function startDemoShopper(db: Db, client: string, now = new Date())
     .where(and(eq(users.email, TEMPLATE_EMAIL), eq(paymentMethods.status, "active")))
     .orderBy(desc(paymentMethods.createdAt))
     .limit(1);
-  if (!template) throw new DemoNotReadyError("The demo wallet isn't set up yet (run scripts/seed.ts).");
   await enforce(
     db,
     [
@@ -55,7 +53,8 @@ export async function startDemoShopper(db: Db, client: string, now = new Date())
 
   return db.transaction(async (tx) => {
     const [user] = await tx.insert(users).values({ displayName: "Demo shopper", demoSessionId: randomUUID(), demoClient: client }).returning();
-    await tx.insert(paymentMethods).values({ userId: user!.id, paypalPaymentTokenId: template.token, paypalCustomerId: template.customer });
+    // Without a shared wallet (a fresh local copy), the shopper links their own sandbox account with PayPal's button.
+    if (template) await tx.insert(paymentMethods).values({ userId: user!.id, paypalPaymentTokenId: template.token, paypalCustomerId: template.customer });
     return user!.id;
   });
 }

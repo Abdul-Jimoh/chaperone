@@ -39,7 +39,7 @@ export function Onboarding({ example, wallet }: { example: string; wallet: Walle
 
       <div className="mt-10 grid gap-4 lg:mt-14 lg:grid-cols-12 lg:items-start">
         <div className="space-y-4 lg:col-span-5">
-          <Card label="Step 1" title="PayPal is linked">
+          <Card label="Step 1" title={wallet.kind === "none" ? "Link PayPal" : "PayPal is linked"}>
             <LinkPayPal wallet={wallet} />
           </Card>
 

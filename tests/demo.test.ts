@@ -6,7 +6,6 @@ import { ledgerEvents, mandates, paymentMethods, payments, users } from "@/db/sc
 import {
   approvalLinkFor,
   dashboard,
-  DemoNotReadyError,
   exampleReadBack,
   NotYoursError,
   revokeOwnMandate,
@@ -14,6 +13,7 @@ import {
   startDemoShopper,
   type DemoWorld,
 } from "@/lib/app/demo";
+import { walletOf } from "@/lib/app/wallet";
 import type { ApprovalDeps } from "@/lib/payments/approvals";
 import { fakePayPal } from "./support/fake-paypal";
 import { resetDb, testDb } from "./support/db";
@@ -63,8 +63,9 @@ describe("judge-mode demo", () => {
     expect(back.notEnforced.some((r) => /every 2 weeks/i.test(r))).toBe(true);
   });
 
-  it("refuses to start before the shared sandbox wallet is seeded", async () => {
-    await expect(startDemoShopper(db, "test-client")).rejects.toBeInstanceOf(DemoNotReadyError);
+  it("starts without a wallet when no shared one is seeded, so the shopper links their own", async () => {
+    const id = await startDemoShopper(db, "test-client");
+    expect(await walletOf(db, id)).toEqual({ kind: "none" });
   });
 
   it("gives each visitor their own shopper, mandate and ledger, sharing only the sandbox wallet", async () => {

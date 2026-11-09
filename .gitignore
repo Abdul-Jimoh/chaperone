@@ -12,6 +12,9 @@ next-env.d.ts
 
 docs/private/
 
+# The local Postgres from pnpm bootstrap.
+.local/
+
 .DS_Store
 
 # Planning notes, progress and discussions stay local; only the README is published.
